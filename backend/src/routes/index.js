@@ -6,12 +6,12 @@ const router = express.Router();
 
 // Import route modules
 const authRoutes = require('./auth');
+const adminRoutes = require('./admin');
+const analyticsRoutes = require('./analytics');
 // const userRoutes = require('./user');
 // const courseRoutes = require('./course');
 // const lessonRoutes = require('./lesson');
 // const quizRoutes = require('./quiz');
-// const adminRoutes = require('./admin');
-// const analyticsRoutes = require('./analytics');
 
 // ========================================
 // API DOCUMENTATION ENDPOINT
@@ -27,26 +27,55 @@ router.get('/docs', (req, res) => {
     endpoints: {
       authentication: {
         base: '/api/auth',
+        description: 'User authentication and profile management',
         routes: {
           'POST /register': 'Register new user',
           'POST /login': 'User login',
           'POST /logout': 'User logout',
-          'POST /refresh': 'Refresh access token',
+          'GET /profile': 'Get user profile',
+          'PATCH /profile': 'Update user profile',
+          'PATCH /change-password': 'Change password',
           'POST /forgot-password': 'Request password reset',
-          'POST /reset-password': 'Reset password with token',
-          'GET /verify-email/:token': 'Verify email address'
+          'PATCH /reset-password/:token': 'Reset password with token'
+        }
+      },
+      
+      admin: {
+        base: '/api/admin',
+        description: 'Admin dashboard and system management',
+        authentication: 'Admin role required',
+        routes: {
+          'GET /dashboard': 'Get admin dashboard overview',
+          'GET /statistics': 'Get system statistics',
+          'GET /users': 'Get all users with filtering',
+          'PUT /users/:id/approve': 'Approve/reject teacher accounts',
+          'PUT /users/:id/status': 'Update user status',
+          'GET /courses': 'Manage all courses',
+          'PUT /courses/:id/status': 'Update course status',
+          'GET /quizzes': 'Manage all quizzes',
+          'GET /health': 'System health metrics',
+          'GET /logs': 'System activity logs'
+        }
+      },
+      
+      analytics: {
+        base: '/api/analytics',
+        description: 'Dashboard analytics and insights',
+        authentication: 'Role-based access',
+        routes: {
+          'GET /teacher/:id': 'Teacher dashboard analytics',
+          'GET /student/:id': 'Student dashboard analytics',
+          'GET /course/:id': 'Course performance analytics',
+          'GET /platform': 'Platform-wide analytics (admin only)'
         }
       },
       
       users: {
         base: '/api/users',
+        status: 'Coming soon',
         routes: {
           'GET /profile': 'Get current user profile',
           'PUT /profile': 'Update user profile',
-          'GET /': 'Get all users (admin only)',
-          'GET /:id': 'Get user by ID',
-          'PUT /:id': 'Update user (admin only)',
-          'DELETE /:id': 'Delete user (admin only)',
           'GET /:id/courses': 'Get user courses',
           'GET /:id/analytics': 'Get user learning analytics'
         }
@@ -54,6 +83,7 @@ router.get('/docs', (req, res) => {
       
       courses: {
         base: '/api/courses',
+        status: 'Coming soon',
         routes: {
           'GET /': 'Get all published courses',
           'GET /:id': 'Get course details',
@@ -68,19 +98,20 @@ router.get('/docs', (req, res) => {
       
       lessons: {
         base: '/api/lessons',
+        status: 'Coming soon',
         routes: {
           'GET /course/:courseId': 'Get lessons for course',
           'GET /:id': 'Get lesson details',
           'POST /': 'Create lesson (teacher only)',
           'PUT /:id': 'Update lesson (teacher only)',
           'DELETE /:id': 'Delete lesson (teacher only)',
-          'POST /:id/progress': 'Update lesson progress',
-          'GET /:id/progress': 'Get lesson progress'
+          'POST /:id/progress': 'Update lesson progress'
         }
       },
       
       quizzes: {
         base: '/api/quizzes',
+        status: 'Coming soon',
         routes: {
           'GET /course/:courseId': 'Get quizzes for course',
           'GET /:id': 'Get quiz details',
@@ -89,30 +120,7 @@ router.get('/docs', (req, res) => {
           'DELETE /:id': 'Delete quiz (teacher only)',
           'POST /:id/attempt': 'Start quiz attempt',
           'PUT /:id/submit': 'Submit quiz attempt',
-          'GET /:id/results': 'Get quiz results',
-          'GET /:id/analytics': 'Get quiz analytics (teacher only)'
-        }
-      },
-      
-      admin: {
-        base: '/api/admin',
-        routes: {
-          'GET /dashboard': 'Get admin dashboard data',
-          'GET /users': 'Manage all users',
-          'GET /courses': 'Manage all courses',
-          'GET /analytics': 'System analytics',
-          'PUT /users/:id/approve': 'Approve teacher account',
-          'PUT /settings': 'Update system settings'
-        }
-      },
-      
-      analytics: {
-        base: '/api/analytics',
-        routes: {
-          'GET /student/:id': 'Get student analytics',
-          'GET /course/:id': 'Get course analytics',
-          'GET /teacher/:id': 'Get teacher analytics',
-          'POST /predict': 'Get ML predictions'
+          'GET /:id/results': 'Get quiz results'
         }
       }
     },
@@ -120,7 +128,8 @@ router.get('/docs', (req, res) => {
     authentication: {
       type: 'Bearer Token (JWT)',
       header: 'Authorization: Bearer <token>',
-      expiry: '7 days'
+      expiry: '7 days',
+      roles: ['admin', 'teacher', 'student']
     },
     
     errorCodes: {
@@ -166,19 +175,24 @@ router.get('/status', (req, res) => {
     services: {
       database: 'connected',
       authentication: 'available',
-      fileUpload: 'available',
-      emailService: 'available',
-      mlService: 'available',
-      websocket: 'connected'
+      adminPanel: 'available',
+      analytics: 'available',
+      fileUpload: 'coming soon',
+      emailService: 'coming soon',
+      mlService: 'coming soon',
+      websocket: 'available'
     },
     
     features: {
       multiRoleSystem: true,
-      quizTimer: true,
+      adminDashboard: true,
+      teacherDashboard: true,
+      studentDashboard: true,
+      quizTimer: 'coming soon',
       realTimeNotifications: true,
-      mlPredictions: true,
-      emailNotifications: true,
-      fileUploads: true,
+      mlPredictions: 'coming soon',
+      emailNotifications: 'coming soon',
+      fileUploads: 'coming soon',
       analytics: true
     }
   });
@@ -190,6 +204,12 @@ router.get('/status', (req, res) => {
 
 // Authentication routes
 router.use('/auth', authRoutes);
+
+// Admin management routes
+router.use('/admin', adminRoutes);
+
+// Analytics routes
+router.use('/analytics', analyticsRoutes);
 
 // User management routes  
 // router.use('/users', userRoutes);
@@ -203,19 +223,60 @@ router.use('/auth', authRoutes);
 // Quiz management routes
 // router.use('/quizzes', quizRoutes);
 
-// Admin routes
-// router.use('/admin', adminRoutes);
-
-// Analytics routes
-// router.use('/analytics', analyticsRoutes);
-
 // Temporary placeholder routes (remove when real routes are implemented)
 router.get('/users/test', (req, res) => {
-  res.json({ message: 'User routes will be implemented here' });
+  res.json({ 
+    success: true,
+    message: 'User routes will be implemented here',
+    status: 'coming soon'
+  });
 });
 
 router.get('/courses/test', (req, res) => {
-  res.json({ message: 'Course routes will be implemented here' });
+  res.json({ 
+    success: true,
+    message: 'Course routes will be implemented here',
+    status: 'coming soon'
+  });
+});
+
+router.get('/quizzes/test', (req, res) => {
+  res.json({ 
+    success: true,
+    message: 'Quiz routes will be implemented here',
+    status: 'coming soon'
+  });
+});
+
+// ========================================
+// HEALTH CHECK FOR SPECIFIC SERVICES
+// ========================================
+
+router.get('/health/auth', (req, res) => {
+  res.json({
+    service: 'Authentication',
+    status: 'operational',
+    endpoints: ['/login', '/register', '/profile'],
+    timestamp: new Date().toISOString()
+  });
+});
+
+router.get('/health/admin', (req, res) => {
+  res.json({
+    service: 'Admin Panel',
+    status: 'operational',
+    endpoints: ['/dashboard', '/users', '/statistics'],
+    timestamp: new Date().toISOString()
+  });
+});
+
+router.get('/health/analytics', (req, res) => {
+  res.json({
+    service: 'Analytics',
+    status: 'operational',
+    endpoints: ['/teacher/:id', '/student/:id', '/course/:id'],
+    timestamp: new Date().toISOString()
+  });
 });
 
 // ========================================
@@ -227,7 +288,13 @@ router.use('*', (req, res) => {
     success: false,
     error: 'API endpoint not found',
     message: `Route ${req.method} ${req.originalUrl} not implemented`,
-    availableEndpoints: '/api/docs'
+    availableEndpoints: '/api/docs',
+    suggestions: [
+      'Check /api/docs for available endpoints',
+      'Verify the HTTP method (GET, POST, PUT, DELETE)',
+      'Ensure proper authentication headers',
+      'Check if the endpoint is implemented'
+    ]
   });
 });
 

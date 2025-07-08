@@ -1,144 +1,204 @@
-// File: backend/src/server.js  
+// File: backend/src/server.js
 // Path: backend/src/server.js
 
 const app = require('./app');
-const { syncDatabase } = require('./models');
-const { createServer } = require('http');
-const { Server: SocketIO } = require('socket.io');
+const http = require('http');
+const socketIo = require('socket.io');
+const sequelize = require('./config/database');
+require('dotenv').config();
 
-// Create HTTP server
-const server = createServer(app);
+// ========================================
+// SERVER SETUP
+// ========================================
 
-// Initialize Socket.IO for real-time features
-const io = new SocketIO(server, {
+const PORT = process.env.PORT || 5000;
+const server = http.createServer(app);
+
+// Setup Socket.IO
+const io = socketIo(server, {
   cors: {
     origin: process.env.NODE_ENV === 'production' 
-      ? process.env.FRONTEND_URL 
-      : ['http://localhost:3000', 'http://127.0.0.1:3000'],
+      ? process.env.FRONTEND_URL || 'http://localhost:3000'
+      : ['http://localhost:3000', 'http://localhost:3001'],
     methods: ['GET', 'POST'],
     credentials: true
   }
 });
 
-// Socket.IO connection handling
+// Store io instance in app for use in controllers
+app.set('io', io);
+
+// ========================================
+// SOCKET.IO EVENTS
+// ========================================
+
 io.on('connection', (socket) => {
   console.log(`🔌 User connected: ${socket.id}`);
-  
-  // Join room for quiz sessions
-  socket.on('join-quiz', (quizId) => {
-    socket.join(`quiz-${quizId}`);
-    console.log(`📝 User ${socket.id} joined quiz ${quizId}`);
-  });
-  
-  // Handle quiz timer events
-  socket.on('quiz-timer-start', (data) => {
-    socket.to(`quiz-${data.quizId}`).emit('timer-started', data);
-  });
-  
-  socket.on('quiz-timer-update', (data) => {
-    socket.to(`quiz-${data.quizId}`).emit('timer-update', data);
-  });
-  
-  socket.on('quiz-submitted', (data) => {
-    socket.to(`quiz-${data.quizId}`).emit('quiz-submitted', data);
-  });
-  
-  // Handle notifications
-  socket.on('join-notifications', (userId) => {
+
+  // Join user to their personal room
+  socket.on('join-user-room', (userId) => {
     socket.join(`user-${userId}`);
-    console.log(`🔔 User ${socket.id} joined notifications for user ${userId}`);
+    console.log(`👤 User ${userId} joined personal room`);
   });
-  
+
+  // Join course room
+  socket.on('join-course-room', (courseId) => {
+    socket.join(`course-${courseId}`);
+    console.log(`📚 User joined course room: ${courseId}`);
+  });
+
+  // Handle quiz start
+  socket.on('quiz-start', (data) => {
+    const { userId, quizId, courseId } = data;
+    socket.join(`quiz-${quizId}`);
+    
+    // Broadcast to course room
+    io.to(`course-${courseId}`).emit('quiz-started', {
+      userId,
+      quizId,
+      timestamp: new Date()
+    });
+  });
+
+  // Handle quiz submission
+  socket.on('quiz-submit', (data) => {
+    const { userId, quizId, courseId, score } = data;
+    
+    // Broadcast to course room
+    io.to(`course-${courseId}`).emit('quiz-completed', {
+      userId,
+      quizId,
+      score,
+      timestamp: new Date()
+    });
+  });
+
+  // Handle real-time notifications
+  socket.on('send-notification', (data) => {
+    const { recipientId, notification } = data;
+    
+    // Send to specific user
+    io.to(`user-${recipientId}`).emit('notification', {
+      ...notification,
+      timestamp: new Date()
+    });
+  });
+
+  // Handle disconnection
   socket.on('disconnect', () => {
-    console.log(`❌ User disconnected: ${socket.id}`);
+    console.log(`🔌 User disconnected: ${socket.id}`);
   });
 });
 
-// Make io available to other modules
-app.set('io', io);
+// ========================================
+// DATABASE CONNECTION
+// ========================================
 
-// Port configuration
-const PORT = process.env.PORT || 5000;
-
-// Database connection and server startup
-async function startServer() {
+const connectDatabase = async () => {
   try {
-    console.log('🚀 Starting LMS Platform Server...');
-    console.log('');
+    await sequelize.authenticate();
+    console.log('📊 Database connected successfully');
     
-    // Test database connection
-    console.log('📊 Connecting to database...');
-    const dbConnected = await syncDatabase(false);
-    
-    if (dbConnected) {
-      console.log('✅ Database connected successfully');
-    } else {
-      throw new Error('Failed to connect to database');
+    // Sync database (only in development)
+    if (process.env.NODE_ENV === 'development') {
+      await sequelize.sync({ alter: false });
+      console.log('🔄 Database synchronized');
     }
     
-    console.log('');
-    
-    // Start HTTP server
+    return true;
+  } catch (error) {
+    console.error('❌ Database connection failed:', error);
+    return false;
+  }
+};
+
+// ========================================
+// START SERVER
+// ========================================
+
+const startServer = async () => {
+  try {
+    // Connect to database
+    const dbConnected = await connectDatabase();
+    if (!dbConnected) {
+      console.error('❌ Failed to connect to database. Exiting...');
+      process.exit(1);
+    }
+
+    // Start server
     server.listen(PORT, () => {
-      console.log('🎉 Server started successfully!');
-      console.log('');
+      console.log('🚀 LMS Server Started!');
       console.log(`📍 Server running on: http://localhost:${PORT}`);
       console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
-      console.log(`📊 Database: ${process.env.DB_NAME || 'lms_platform'}`);
-      console.log(`🔌 Socket.IO: Enabled`);
+      console.log(`📊 Database: ${process.env.DB_NAME} @ ${process.env.DB_HOST}:${process.env.DB_PORT}`);
       console.log('');
       console.log('📋 Available endpoints:');
-      console.log(`   Health Check: http://localhost:${PORT}/health`);
-      console.log(`   API Base: http://localhost:${PORT}/api`);
-      console.log(`   Documentation: http://localhost:${PORT}/api/docs`);
+      console.log(`   Health: http://localhost:${PORT}/health`);
+      console.log(`   API Docs: http://localhost:${PORT}/api/docs`);
+      console.log(`   Auth: http://localhost:${PORT}/api/auth/*`);
       console.log('');
-      console.log('🔑 Ready to accept requests!');
+      console.log('🔐 Auth endpoints:');
+      console.log(`   Register: POST http://localhost:${PORT}/api/auth/register`);
+      console.log(`   Login: POST http://localhost:${PORT}/api/auth/login`);
+      console.log(`   Profile: GET http://localhost:${PORT}/api/auth/profile`);
+      console.log('');
+      console.log('🌐 Socket.IO ready for real-time communications');
+      console.log('✅ Server ready for requests!');
     });
-    
+
   } catch (error) {
-    console.error('❌ Failed to start server:', error.message);
-    console.error('');
-    console.error('💡 Troubleshooting:');
-    console.error('1. Check database connection in .env file');
-    console.error('2. Ensure PostgreSQL server is running');
-    console.error('3. Run database migrations: npm run db:migrate');
-    console.error('4. Check if port is already in use');
-    console.error('');
+    console.error('❌ Failed to start server:', error);
     process.exit(1);
   }
-}
+};
 
-// Handle server errors
-server.on('error', (error) => {
-  if (error.code === 'EADDRINUSE') {
-    console.error(`❌ Port ${PORT} is already in use`);
-    console.error('💡 Try a different port or stop the other process');
-  } else {
-    console.error('❌ Server error:', error);
-  }
+// ========================================
+// GRACEFUL SHUTDOWN
+// ========================================
+
+const gracefulShutdown = (signal) => {
+  console.log(`👋 ${signal} received`);
+  console.log('🔄 Shutting down gracefully...');
+  
+  server.close(async () => {
+    console.log('🔌 HTTP server closed');
+    
+    try {
+      await sequelize.close();
+      console.log('📊 Database connection closed');
+    } catch (error) {
+      console.error('❌ Error closing database:', error);
+    }
+    
+    console.log('✅ Process terminated');
+    process.exit(0);
+  });
+};
+
+// Handle shutdown signals
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (err, promise) => {
+  console.error('💥 Unhandled Promise Rejection:', err.message);
+  server.close(() => {
+    process.exit(1);
+  });
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (err) => {
+  console.error('💥 Uncaught Exception:', err.message);
+  console.error(err.stack);
   process.exit(1);
 });
 
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('🛑 Received SIGTERM, shutting down gracefully...');
-  server.close(() => {
-    console.log('✅ Server closed');
-    process.exit(0);
-  });
-});
+// ========================================
+// START THE SERVER
+// ========================================
 
-process.on('SIGINT', () => {
-  console.log('🛑 Received SIGINT, shutting down gracefully...');
-  server.close(() => {
-    console.log('✅ Server closed');
-    process.exit(0);
-  });
-});
+startServer();
 
-// Start the server
-if (require.main === module) {
-  startServer();
-}
-
-module.exports = { server, io };
+// Export for testing
+module.exports = { app, server, io };

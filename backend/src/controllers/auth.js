@@ -4,8 +4,7 @@
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const { User } = require('../models');
-const { AppError } = require('../middleware/errorHandler');
-const { catchAsync } = require('../middleware/errorHandler');
+const { AppError, catchAsync } = require('../middleware/errorHandler');
 const { generateTokens, verifyToken } = require('../middleware/auth');
 
 // ========================================
@@ -18,6 +17,7 @@ const createSendToken = (user, statusCode, res, message = 'Success') => {
 
   // Remove password from output
   const userOutput = user.toJSON();
+  delete userOutput.password;
 
   res.status(statusCode).json({
     success: true,
@@ -79,11 +79,32 @@ const register = catchAsync(async (req, res, next) => {
   await newUser.save();
 
   // Log activity
-  req.app.get('io')?.emit('user-registered', {
-    userId: newUser.id,
-    role: newUser.role,
-    timestamp: new Date()
-  });
+  try {
+    const { UserActivity } = require('../models');
+    await UserActivity.create({
+      userId: newUser.id,
+      activityType: 'registration',
+      details: {
+        registrationTime: new Date(),
+        userAgent: req.get('User-Agent'),
+        ip: req.ip
+      },
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent')
+    });
+  } catch (error) {
+    console.log('Activity logging failed:', error.message);
+  }
+
+  // Emit socket event if available
+  const io = req.app.get('io');
+  if (io) {
+    io.emit('user-registered', {
+      userId: newUser.id,
+      role: newUser.role,
+      timestamp: new Date()
+    });
+  }
 
   // Send response
   const message = role === 'teacher' 
@@ -133,18 +154,22 @@ const login = catchAsync(async (req, res, next) => {
   await user.save();
 
   // Log activity
-  const { UserActivity } = require('../models');
-  await UserActivity.create({
-    userId: user.id,
-    activityType: 'login',
-    details: {
-      loginTime: new Date(),
-      userAgent: req.get('User-Agent'),
-      ip: req.ip
-    },
-    ipAddress: req.ip,
-    userAgent: req.get('User-Agent')
-  });
+  try {
+    const { UserActivity } = require('../models');
+    await UserActivity.create({
+      userId: user.id,
+      activityType: 'login',
+      details: {
+        loginTime: new Date(),
+        userAgent: req.get('User-Agent'),
+        ip: req.ip
+      },
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent')
+    });
+  } catch (error) {
+    console.log('Activity logging failed:', error.message);
+  }
 
   // Send response
   createSendToken(user, 200, res, 'Login successful');
@@ -155,18 +180,22 @@ const login = catchAsync(async (req, res, next) => {
 // @access  Private
 const logout = catchAsync(async (req, res, next) => {
   // Log activity
-  const { UserActivity } = require('../models');
-  await UserActivity.create({
-    userId: req.user.id,
-    activityType: 'logout',
-    details: {
-      logoutTime: new Date(),
-      userAgent: req.get('User-Agent'),
-      ip: req.ip
-    },
-    ipAddress: req.ip,
-    userAgent: req.get('User-Agent')
-  });
+  try {
+    const { UserActivity } = require('../models');
+    await UserActivity.create({
+      userId: req.user.id,
+      activityType: 'logout',
+      details: {
+        logoutTime: new Date(),
+        userAgent: req.get('User-Agent'),
+        ip: req.ip
+      },
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent')
+    });
+  } catch (error) {
+    console.log('Activity logging failed:', error.message);
+  }
 
   res.status(200).json({
     success: true,
@@ -175,7 +204,7 @@ const logout = catchAsync(async (req, res, next) => {
 });
 
 // @desc    Refresh access token
-// @route   POST /api/auth/refresh
+// @route   POST /api/auth/refresh-token
 // @access  Public
 const refreshToken = catchAsync(async (req, res, next) => {
   const { refreshToken: token } = req.body;
@@ -218,43 +247,68 @@ const refreshToken = catchAsync(async (req, res, next) => {
 });
 
 // @desc    Get current user profile
-// @route   GET /api/auth/me
+// @route   GET /api/auth/profile
 // @access  Private
 const getMe = catchAsync(async (req, res, next) => {
-  const user = await User.findByPk(req.user.id, {
-    include: [
-      {
-        model: require('../models').Enrollment,
-        as: 'enrollments',
-        where: { status: 'approved', isActive: true },
-        required: false,
-        include: [
-          {
-            model: require('../models').Course,
-            as: 'course',
-            attributes: ['id', 'title', 'thumbnail', 'difficultyLevel']
-          }
-        ]
-      }
-    ]
-  });
+  try {
+    // Get user with enrollments
+    const user = await User.findByPk(req.user.id, {
+      include: [
+        {
+          model: require('../models').Enrollment,
+          as: 'enrollments',
+          where: { status: 'approved', isActive: true },
+          required: false,
+          include: [
+            {
+              model: require('../models').Course,
+              as: 'course',
+              attributes: ['id', 'title', 'thumbnail', 'difficultyLevel']
+            }
+          ]
+        }
+      ]
+    });
 
-  res.status(200).json({
-    success: true,
-    data: {
-      user
+    if (!user) {
+      return next(new AppError('User not found', 404));
     }
-  });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        user
+      }
+    });
+  } catch (error) {
+    // If relation models don't exist, just return user without enrollments
+    const user = await User.findByPk(req.user.id);
+    
+    if (!user) {
+      return next(new AppError('User not found', 404));
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        user
+      }
+    });
+  }
 });
 
 // @desc    Update current user profile
-// @route   PUT /api/auth/profile
+// @route   PATCH /api/auth/profile
 // @access  Private
 const updateProfile = catchAsync(async (req, res, next) => {
   const { firstName, lastName, phone, dateOfBirth, bio, address } = req.body;
 
   // Update user
   const user = await User.findByPk(req.user.id);
+  
+  if (!user) {
+    return next(new AppError('User not found', 404));
+  }
   
   if (firstName) user.firstName = firstName;
   if (lastName) user.lastName = lastName;
@@ -275,7 +329,7 @@ const updateProfile = catchAsync(async (req, res, next) => {
 });
 
 // @desc    Change password
-// @route   PUT /api/auth/password
+// @route   PATCH /api/auth/change-password
 // @access  Private
 const changePassword = catchAsync(async (req, res, next) => {
   const { currentPassword, newPassword } = req.body;
@@ -284,6 +338,10 @@ const changePassword = catchAsync(async (req, res, next) => {
   const user = await User.findByPk(req.user.id, {
     attributes: { include: ['password'] }
   });
+
+  if (!user) {
+    return next(new AppError('User not found', 404));
+  }
 
   // Check current password
   if (!(await user.validatePassword(currentPassword))) {
@@ -295,18 +353,22 @@ const changePassword = catchAsync(async (req, res, next) => {
   await user.save();
 
   // Log activity
-  const { UserActivity } = require('../models');
-  await UserActivity.create({
-    userId: user.id,
-    activityType: 'password_changed',
-    details: {
-      changeTime: new Date(),
-      userAgent: req.get('User-Agent'),
-      ip: req.ip
-    },
-    ipAddress: req.ip,
-    userAgent: req.get('User-Agent')
-  });
+  try {
+    const { UserActivity } = require('../models');
+    await UserActivity.create({
+      userId: user.id,
+      activityType: 'password_changed',
+      details: {
+        changeTime: new Date(),
+        userAgent: req.get('User-Agent'),
+        ip: req.ip
+      },
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent')
+    });
+  } catch (error) {
+    console.log('Activity logging failed:', error.message);
+  }
 
   res.status(200).json({
     success: true,
@@ -345,7 +407,7 @@ const forgotPassword = catchAsync(async (req, res, next) => {
 });
 
 // @desc    Reset password
-// @route   POST /api/auth/reset-password/:token
+// @route   PATCH /api/auth/reset-password/:token
 // @access  Public
 const resetPassword = catchAsync(async (req, res, next) => {
   const { token } = req.params;
@@ -375,18 +437,22 @@ const resetPassword = catchAsync(async (req, res, next) => {
   await user.save();
 
   // Log activity
-  const { UserActivity } = require('../models');
-  await UserActivity.create({
-    userId: user.id,
-    activityType: 'password_reset',
-    details: {
-      resetTime: new Date(),
-      userAgent: req.get('User-Agent'),
-      ip: req.ip
-    },
-    ipAddress: req.ip,
-    userAgent: req.get('User-Agent')
-  });
+  try {
+    const { UserActivity } = require('../models');
+    await UserActivity.create({
+      userId: user.id,
+      activityType: 'password_reset',
+      details: {
+        resetTime: new Date(),
+        userAgent: req.get('User-Agent'),
+        ip: req.ip
+      },
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent')
+    });
+  } catch (error) {
+    console.log('Activity logging failed:', error.message);
+  }
 
   res.status(200).json({
     success: true,

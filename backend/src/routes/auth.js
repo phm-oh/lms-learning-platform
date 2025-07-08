@@ -7,7 +7,7 @@ const router = express.Router();
 // Import controllers and middleware
 const authController = require('../controllers/auth');
 const { protect, optionalAuth } = require('../middleware/auth');
-const { validate, userSchemas, paramSchemas } = require('../middleware/validation');
+const { validate, userSchemas } = require('../middleware/validation');
 const { 
   authLimiter, 
   passwordResetLimiter, 
@@ -60,10 +60,10 @@ router.post('/logout',
   authController.logout
 );
 
-// Get current user profile
+// Get current user profile - FIXED: ใช้ getMe แทน getProfile
 router.get('/profile',
   protect,
-  authController.getProfile
+  authController.getMe
 );
 
 // Update user profile
@@ -80,12 +80,6 @@ router.patch('/change-password',
   authController.changePassword
 );
 
-// Validate current token
-router.get('/validate-token',
-  protect,
-  authController.validateToken
-);
-
 // Refresh token
 router.post('/refresh-token',
   protect,
@@ -96,7 +90,7 @@ router.post('/refresh-token',
 router.post('/resend-verification',
   protect,
   generalLimiter,
-  authController.resendVerification
+  authController.verifyEmail
 );
 
 // ========================================
@@ -253,17 +247,6 @@ router.get('/docs', (req, res) => {
         responses: {
           200: 'Password changed',
           400: 'Invalid current password'
-        }
-      },
-      
-      'GET /validate-token': {
-        description: 'Validate current JWT token',
-        headers: {
-          Authorization: 'Bearer <token>'
-        },
-        responses: {
-          200: 'Token is valid',
-          401: 'Token invalid or expired'
         }
       },
       
