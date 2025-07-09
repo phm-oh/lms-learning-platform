@@ -3,6 +3,7 @@
 
 const { Quiz, QuizQuestion, QuizAttempt, QuizResponse, Course, User } = require('../models');
 const { AppError, catchAsync } = require('../middleware/errorHandler');
+const { sendEmail } = require('../utils/emailService');
 const { Op } = require('sequelize');
 
 // ========================================
@@ -139,7 +140,16 @@ const createQuiz = catchAsync(async (req, res, next) => {
   
   try {
     // Check if user owns the course
-    const course = await Course.findByPk(courseId);
+    const course = await Course.findByPk(courseId, {
+      include: [
+        {
+          model: User,
+          as: 'teacher',
+          attributes: ['firstName', 'lastName', 'email']
+        }
+      ]
+    });
+    
     if (!course) {
       return next(new AppError('Course not found', 404));
     }
@@ -192,6 +202,37 @@ const createQuiz = catchAsync(async (req, res, next) => {
         }
       ]
     });
+
+    // 📧 SEND QUIZ CREATION CONFIRMATION EMAIL TO TEACHER
+    try {
+      await sendEmail({
+        to: req.user.email,
+        subject: '📝 แบบทดสอบใหม่ถูกสร้างแล้ว!',
+        template: 'quiz-created',
+        data: {
+          teacherName: `${req.user.firstName} ${req.user.lastName}`,
+          quizTitle: title,
+          courseTitle: course.title,
+          quizType: quizType || 'practice',
+          questionsCount: questions ? questions.length : 0,
+          timeLimit: timeLimit ? `${timeLimit} นาที` : 'ไม่จำกัดเวลา',
+          maxAttempts: maxAttempts || 1,
+          passingScore: `${passingScore || 70}%`,
+          createdDate: new Date().toLocaleDateString('th-TH'),
+          quizUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/teacher/quizzes/${quiz.id}`,
+          courseManagementUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/teacher/courses/${courseId}`,
+          nextSteps: [
+            'เพิ่มคำถามในแบบทดสอบ',
+            'ตั้งค่าการเผยแพร่',
+            'ทดสอบแบบทดสอบก่อนเผยแพร่'
+          ]
+        }
+      });
+
+      console.log(`✅ Quiz creation email sent to teacher: ${req.user.email}`);
+    } catch (emailError) {
+      console.error('❌ Failed to send quiz creation email:', emailError.message);
+    }
     
     res.status(201).json({
       success: true,
@@ -409,6 +450,113 @@ const submitQuiz = catchAsync(async (req, res, next) => {
     await completeQuizAttempt(attempt);
     
     const completedAttempt = await QuizAttempt.findByPk(attempt.id);
+
+    // 📧 SEND QUIZ RESULTS EMAIL TO STUDENT
+    try {
+      const quiz = await Quiz.findByPk(id, {
+        include: [
+          {
+            model: Course,
+            as: 'course',
+            attributes: ['title'],
+            include: [
+              {
+                model: User,
+                as: 'teacher',
+                attributes: ['firstName', 'lastName', 'email']
+              }
+            ]
+          }
+        ]
+      });
+
+      const isPassed = completedAttempt.percentage >= quiz.passingScore;
+      const grade = getGradeFromPercentage(completedAttempt.percentage);
+      const encouragementMessage = getEncouragementMessage(completedAttempt.percentage, isPassed);
+
+      await sendEmail({
+        to: req.user.email,
+        subject: isPassed ? '🎉 ยินดีด้วย! คุณสอบผ่านแล้ว' : '📊 ผลการสอบของคุณ',
+        template: 'quiz-results',
+        data: {
+          studentName: `${req.user.firstName} ${req.user.lastName}`,
+          quizTitle: quiz.title,
+          courseTitle: quiz.course.title,
+          teacherName: `${quiz.course.teacher.firstName} ${quiz.course.teacher.lastName}`,
+          score: completedAttempt.score,
+          maxScore: completedAttempt.maxScore,
+          percentage: completedAttempt.percentage,
+          grade: grade,
+          passingScore: quiz.passingScore,
+          isPassed: isPassed,
+          attemptNumber: completedAttempt.attemptNumber,
+          maxAttempts: quiz.maxAttempts,
+          timeSpent: Math.round(completedAttempt.timeSpent / 60) || 1, // minutes
+          submittedDate: new Date().toLocaleDateString('th-TH'),
+          encouragementMessage: encouragementMessage,
+          canRetake: completedAttempt.attemptNumber < quiz.maxAttempts && !isPassed,
+          retakeUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/student/courses/${quiz.courseId}/quizzes/${quiz.id}`,
+          courseUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/student/courses/${quiz.courseId}`,
+          certificateUrl: isPassed ? `${process.env.FRONTEND_URL || 'http://localhost:3000'}/student/certificates` : null,
+          studyTips: !isPassed ? [
+            'ทบทวนเนื้อหาในบทเรียนอีกครั้ง',
+            'ฝึกทำแบบทดสอบเพิ่มเติม',
+            'ปรึกษาครูผู้สอนหากมีข้อสงสัย'
+          ] : null
+        }
+      });
+
+      console.log(`✅ Quiz results email sent to: ${req.user.email} (${isPassed ? 'PASSED' : 'FAILED'})`);
+
+      // 📧 NOTIFY TEACHER ABOUT QUIZ COMPLETION (if significant)
+      if (isPassed || completedAttempt.attemptNumber >= quiz.maxAttempts) {
+        try {
+          await sendEmail({
+            to: quiz.course.teacher.email,
+            subject: `📋 นักเรียน${isPassed ? 'สอบผ่าน' : 'ทำแบบทดสอบครบจำนวนครั้งแล้ว'}: ${quiz.title}`,
+            template: 'quiz-completion-teacher',
+            data: {
+              teacherName: `${quiz.course.teacher.firstName} ${quiz.course.teacher.lastName}`,
+              studentName: `${req.user.firstName} ${req.user.lastName}`,
+              quizTitle: quiz.title,
+              courseTitle: quiz.course.title,
+              score: completedAttempt.score,
+              maxScore: completedAttempt.maxScore,
+              percentage: completedAttempt.percentage,
+              grade: grade,
+              isPassed: isPassed,
+              attemptNumber: completedAttempt.attemptNumber,
+              maxAttempts: quiz.maxAttempts,
+              completedDate: new Date().toLocaleDateString('th-TH'),
+              studentEmail: req.user.email,
+              quizAnalyticsUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/teacher/analytics/quiz/${quiz.id}`,
+              studentProfileUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/teacher/students/${req.user.id}`
+            }
+          });
+
+          console.log(`✅ Quiz completion notification sent to teacher: ${quiz.course.teacher.email}`);
+        } catch (teacherEmailError) {
+          console.error('❌ Failed to send teacher notification:', teacherEmailError.message);
+        }
+      }
+
+    } catch (emailError) {
+      console.error('❌ Failed to send quiz results email:', emailError.message);
+    }
+
+    // Emit socket events for real-time notifications
+    const io = req.app.get('io');
+    if (io) {
+      // Notify student
+      io.to(`user-${req.user.id}`).emit('quiz-completed', {
+        quizId: id,
+        attemptId: completedAttempt.id,
+        score: completedAttempt.score,
+        percentage: completedAttempt.percentage,
+        isPassed: completedAttempt.percentage >= (await Quiz.findByPk(id)).passingScore,
+        timestamp: new Date()
+      });
+    }
     
     res.status(200).json({
       success: true,
@@ -419,6 +567,8 @@ const submitQuiz = catchAsync(async (req, res, next) => {
           score: completedAttempt.score,
           maxScore: completedAttempt.maxScore,
           percentage: completedAttempt.percentage,
+          grade: getGradeFromPercentage(completedAttempt.percentage),
+          isPassed: completedAttempt.percentage >= (await Quiz.findByPk(id)).passingScore,
           isCompleted: true,
           submittedAt: completedAttempt.submittedAt
         }
@@ -488,6 +638,27 @@ const checkAnswer = (question, userAnswer) => {
       return userAnswer.toLowerCase().includes(question.correctAnswer.toLowerCase());
     default:
       return false;
+  }
+};
+
+const getGradeFromPercentage = (percentage) => {
+  if (percentage >= 90) return 'A';
+  if (percentage >= 80) return 'B';
+  if (percentage >= 70) return 'C';
+  if (percentage >= 60) return 'D';
+  return 'F';
+};
+
+const getEncouragementMessage = (percentage, isPassed) => {
+  if (isPassed) {
+    if (percentage >= 95) return '🌟 ยอดเยี่ยมมาก! คุณเรียนรู้ได้อย่างสมบูรณ์แบบ';
+    if (percentage >= 85) return '🎉 เก่งมาก! ผลงานของคุณน่าประทับใจ';
+    if (percentage >= 75) return '👏 ดีมาก! คุณเข้าใจเนื้อหาเป็นอย่างดี';
+    return '✅ ยินดีด้วย! คุณผ่านการทดสอบแล้ว';
+  } else {
+    if (percentage >= 60) return '💪 เกือบแล้ว! ลองทบทวนอีกนิดนึงแล้วสอบใหม่';
+    if (percentage >= 40) return '📚 ไม่เป็นไร ทบทวนเนื้อหาแล้วลองใหม่อีกครั้ง';
+    return '🎯 อย่าท้อ! กลับไปศึกษาเนื้อหาแล้วมาลองใหม่นะ';
   }
 };
 

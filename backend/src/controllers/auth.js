@@ -6,6 +6,16 @@ const crypto = require('crypto');
 const { User } = require('../models');
 const { AppError, catchAsync } = require('../middleware/errorHandler');
 const { generateTokens, verifyToken } = require('../middleware/auth');
+const { sendEmail } = require('../utils/emailService');
+const { 
+  processImage, 
+  generateUniqueFileName, 
+  formatFileSize, 
+  saveFileLocally,
+  deleteFileLocally,
+  validateFile,
+  FILE_TYPE_CONFIGS
+} = require('../utils/fileHelper');
 
 // ========================================
 // HELPER FUNCTIONS
@@ -96,20 +106,93 @@ const register = catchAsync(async (req, res, next) => {
     console.log('Activity logging failed:', error.message);
   }
 
+  // 📧 SEND EMAILS BASED ON ROLE
+  try {
+    if (role === 'student') {
+      // Send welcome email to student
+      await sendEmail({
+        to: email,
+        subject: '🎉 ยินดีต้อนรับสู่ระบบ LMS!',
+        template: 'welcome-student',
+        data: {
+          firstName,
+          lastName,
+          loginUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/login`,
+          supportEmail: process.env.SUPPORT_EMAIL || 'support@lms.com'
+        }
+      });
+
+      console.log(`✅ Welcome email sent to student: ${email}`);
+
+    } else if (role === 'teacher') {
+      // Send welcome email to teacher (pending approval)
+      await sendEmail({
+        to: email,
+        subject: '👩‍🏫 ยินดีต้อนรับครูผู้สอน - รอการอนุมัติ',
+        template: 'welcome-teacher-pending',
+        data: {
+          firstName,
+          lastName,
+          adminContact: process.env.ADMIN_EMAIL || 'admin@lms.com',
+          loginUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/login`
+        }
+      });
+
+      // 🚨 NOTIFY ADMIN ABOUT NEW TEACHER REGISTRATION
+      const adminUsers = await User.findAll({
+        where: { role: 'admin', status: 'active' }
+      }).catch(() => []);
+
+      for (const admin of adminUsers) {
+        await sendEmail({
+          to: admin.email,
+          subject: '🆕 ครูใหม่ลงทะเบียนรอการอนุมัติ',
+          template: 'admin-new-teacher-notification',
+          data: {
+            adminName: admin.firstName,
+            teacherName: `${firstName} ${lastName}`,
+            teacherEmail: email,
+            teacherPhone: phone || 'ไม่ระบุ',
+            registrationDate: new Date().toLocaleDateString('th-TH'),
+            approvalUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/admin/teachers`,
+            teacherId: newUser.id
+          }
+        });
+      }
+
+      console.log(`✅ Teacher registration emails sent: ${email} + admins notified`);
+    }
+
+  } catch (emailError) {
+    console.error('❌ Email sending failed during registration:', emailError.message);
+    // Don't fail registration if email fails - just log it
+  }
+
   // Emit socket event if available
   const io = req.app.get('io');
   if (io) {
     io.emit('user-registered', {
       userId: newUser.id,
       role: newUser.role,
-      timestamp: new Date()
+      timestamp: new Date(),
+      needsApproval: role === 'teacher'
     });
+
+    // Emit to admin room for teacher registrations
+    if (role === 'teacher') {
+      io.to('admin-room').emit('teacher-registration', {
+        teacherId: newUser.id,
+        teacherName: `${firstName} ${lastName}`,
+        email: email,
+        timestamp: new Date()
+      });
+    }
   }
 
   // Send response
   const message = role === 'teacher' 
-    ? 'Registration successful! Your teacher account is pending admin approval.' 
-    : 'Registration successful! You can now log in.';
+    ? 'Registration successful! Your teacher account is pending admin approval. You will receive an email once approved.' 
+    : 'Registration successful! You can now log in and start learning.';
 
   createSendToken(newUser, 201, res, message);
 });
@@ -146,7 +229,7 @@ const login = catchAsync(async (req, res, next) => {
   }
 
   if (user.status === 'pending' && user.role === 'teacher') {
-    return next(new AppError('Your teacher account is pending approval. Please wait for admin approval.', 401));
+    return next(new AppError('Your teacher account is pending approval. Please wait for admin approval or contact support.', 401));
   }
 
   // Update last login
@@ -169,6 +252,16 @@ const login = catchAsync(async (req, res, next) => {
     });
   } catch (error) {
     console.log('Activity logging failed:', error.message);
+  }
+
+  // Emit socket event for real-time user tracking
+  const io = req.app.get('io');
+  if (io) {
+    io.emit('user-online', {
+      userId: user.id,
+      role: user.role,
+      timestamp: new Date()
+    });
   }
 
   // Send response
@@ -195,6 +288,15 @@ const logout = catchAsync(async (req, res, next) => {
     });
   } catch (error) {
     console.log('Activity logging failed:', error.message);
+  }
+
+  // Emit socket event
+  const io = req.app.get('io');
+  if (io) {
+    io.emit('user-offline', {
+      userId: req.user.id,
+      timestamp: new Date()
+    });
   }
 
   res.status(200).json({
@@ -328,6 +430,230 @@ const updateProfile = catchAsync(async (req, res, next) => {
   });
 });
 
+// ========================================
+// 📸 PROFILE PHOTO UPLOAD INTEGRATION
+// ========================================
+
+// @desc    Upload and update profile photo
+// @route   POST /api/auth/profile/photo
+// @access  Private
+const uploadProfilePhoto = catchAsync(async (req, res, next) => {
+  if (!req.file) {
+    return next(new AppError('ไม่พบไฟล์รูปภาพที่อัปโหลด', 400));
+  }
+
+  const userId = req.user.id;
+  const file = req.file;
+
+  // Validate file
+  const validation = validateFile(file, FILE_TYPE_CONFIGS.profile);
+  if (!validation.isValid) {
+    return next(new AppError(validation.errors.join(', '), 400));
+  }
+
+  try {
+    // Process image
+    const imageBuffer = file.buffer || require('fs').readFileSync(file.path);
+    const processResult = await processImage(imageBuffer, {
+      width: 400,
+      height: 400,
+      quality: 85,
+      format: 'jpeg',
+      generateThumbnail: true,
+      thumbnailSize: 150
+    });
+
+    if (!processResult.success) {
+      return next(new AppError('เกิดข้อผิดพลาดในการประมวลผลรูปภาพ', 500));
+    }
+
+    // Generate unique filename
+    const fileName = generateUniqueFileName(file.originalname, `profile_${userId}`);
+    const thumbnailName = generateUniqueFileName(file.originalname, `profile_${userId}_thumb`);
+
+    // Save processed image
+    const saveResult = await saveFileLocally(processResult.processedBuffer, fileName, 'profiles');
+    if (!saveResult.success) {
+      return next(new AppError('เกิดข้อผิดพลาดในการบันทึกรูปภาพ', 500));
+    }
+
+    // Save thumbnail
+    let thumbnailUrl = null;
+    if (processResult.thumbnail) {
+      const thumbnailResult = await saveFileLocally(processResult.thumbnail, thumbnailName, 'profiles/thumbnails');
+      if (thumbnailResult.success) {
+        thumbnailUrl = thumbnailResult.fullUrl;
+      }
+    }
+
+    // Get user and delete old photo if exists
+    const user = await User.findByPk(userId);
+    if (!user) {
+      return next(new AppError('ไม่พบผู้ใช้', 404));
+    }
+
+    // Delete old profile photo if exists
+    if (user.profilePhoto && user.profilePhoto !== saveResult.fullUrl) {
+      try {
+        const oldPath = user.profilePhoto.replace(process.env.API_URL || 'http://localhost:5000', '.');
+        await deleteFileLocally(oldPath);
+      } catch (error) {
+        console.log('Failed to delete old profile photo:', error.message);
+      }
+    }
+
+    // Delete old thumbnail if exists
+    if (user.profileThumbnail && user.profileThumbnail !== thumbnailUrl) {
+      try {
+        const oldThumbPath = user.profileThumbnail.replace(process.env.API_URL || 'http://localhost:5000', '.');
+        await deleteFileLocally(oldThumbPath);
+      } catch (error) {
+        console.log('Failed to delete old profile thumbnail:', error.message);
+      }
+    }
+
+    // Update user with new photo URLs
+    user.profilePhoto = saveResult.fullUrl;
+    user.profileThumbnail = thumbnailUrl;
+    await user.save();
+
+    // Clean up temp file if using local storage
+    if (file.path) {
+      try {
+        await deleteFileLocally(file.path);
+      } catch (error) {
+        console.log('Failed to clean up temp file:', error.message);
+      }
+    }
+
+    // 📧 Send profile update notification
+    try {
+      await sendEmail({
+        to: user.email,
+        subject: '📸 รูปโปรไฟล์ของคุณอัปเดตแล้ว',
+        template: 'profile-photo-updated',
+        data: {
+          firstName: user.firstName,
+          lastName: user.lastName,
+          updateDate: new Date().toLocaleDateString('th-TH'),
+          profileUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/profile`,
+          photoUrl: saveResult.fullUrl
+        }
+      });
+
+      console.log(`✅ Profile photo update email sent to: ${user.email}`);
+    } catch (emailError) {
+      console.error('❌ Failed to send profile update email:', emailError.message);
+    }
+
+    // Emit socket event for real-time update
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`user-${userId}`).emit('profile-photo-updated', {
+        profilePhoto: user.profilePhoto,
+        profileThumbnail: user.profileThumbnail,
+        timestamp: new Date()
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'อัปโหลดรูปโปรไฟล์สำเร็จ',
+      data: {
+        user: {
+          id: user.id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          profilePhoto: user.profilePhoto,
+          profileThumbnail: user.profileThumbnail
+        },
+        fileInfo: {
+          originalName: file.originalname,
+          fileName: fileName,
+          size: formatFileSize(processResult.processedSize),
+          url: saveResult.fullUrl,
+          thumbnailUrl: thumbnailUrl
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Profile photo upload error:', error);
+    return next(new AppError('เกิดข้อผิดพลาดในการอัปโหลดรูปโปรไฟล์', 500));
+  }
+});
+
+// @desc    Delete profile photo
+// @route   DELETE /api/auth/profile/photo
+// @access  Private
+const deleteProfilePhoto = catchAsync(async (req, res, next) => {
+  const userId = req.user.id;
+
+  try {
+    const user = await User.findByPk(userId);
+    if (!user) {
+      return next(new AppError('ไม่พบผู้ใช้', 404));
+    }
+
+    if (!user.profilePhoto) {
+      return next(new AppError('ไม่มีรูปโปรไฟล์ที่จะลบ', 400));
+    }
+
+    // Delete profile photo file
+    try {
+      const photoPath = user.profilePhoto.replace(process.env.API_URL || 'http://localhost:5000', '.');
+      await deleteFileLocally(photoPath);
+    } catch (error) {
+      console.log('Failed to delete profile photo file:', error.message);
+    }
+
+    // Delete thumbnail file
+    if (user.profileThumbnail) {
+      try {
+        const thumbPath = user.profileThumbnail.replace(process.env.API_URL || 'http://localhost:5000', '.');
+        await deleteFileLocally(thumbPath);
+      } catch (error) {
+        console.log('Failed to delete profile thumbnail file:', error.message);
+      }
+    }
+
+    // Clear photo URLs from database
+    user.profilePhoto = null;
+    user.profileThumbnail = null;
+    await user.save();
+
+    // Emit socket event
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`user-${userId}`).emit('profile-photo-deleted', {
+        timestamp: new Date()
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'ลบรูปโปรไฟล์สำเร็จ',
+      data: {
+        user: {
+          id: user.id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          profilePhoto: null,
+          profileThumbnail: null
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Profile photo deletion error:', error);
+    return next(new AppError('เกิดข้อผิดพลาดในการลบรูปโปรไฟล์', 500));
+  }
+});
+
+// ========================================
+// EXISTING PASSWORD FUNCTIONS (UNCHANGED)
+// ========================================
+
 // @desc    Change password
 // @route   PATCH /api/auth/change-password
 // @access  Private
@@ -351,6 +677,26 @@ const changePassword = catchAsync(async (req, res, next) => {
   // Update password
   user.password = newPassword;
   await user.save();
+
+  // 📧 Send password change confirmation email
+  try {
+    await sendEmail({
+      to: user.email,
+      subject: '🔐 รหัสผ่านของคุณถูกเปลี่ยนแล้ว',
+      template: 'password-changed',
+      data: {
+        firstName: user.firstName,
+        lastName: user.lastName,
+        changeTime: new Date().toLocaleString('th-TH'),
+        loginUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/login`,
+        supportEmail: process.env.SUPPORT_EMAIL || 'support@lms.com'
+      }
+    });
+
+    console.log(`✅ Password change confirmation sent to: ${user.email}`);
+  } catch (emailError) {
+    console.error('❌ Failed to send password change email:', emailError.message);
+  }
 
   // Log activity
   try {
@@ -396,14 +742,39 @@ const forgotPassword = catchAsync(async (req, res, next) => {
   user.passwordResetExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
   await user.save();
 
-  // TODO: Send email with reset token
-  // For now, just return the token (remove in production)
-  
-  res.status(200).json({
-    success: true,
-    message: 'Password reset token sent to email',
-    ...(process.env.NODE_ENV === 'development' && { resetToken }) // Only in development
-  });
+  // 📧 Send password reset email
+  try {
+    const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password/${resetToken}`;
+    
+    await sendEmail({
+      to: email,
+      subject: '🔑 รีเซ็ตรหัสผ่าน LMS',
+      template: 'password-reset',
+      data: {
+        firstName: user.firstName,
+        lastName: user.lastName,
+        resetUrl,
+        expirationTime: '10 นาที',
+        supportEmail: process.env.SUPPORT_EMAIL || 'support@lms.com'
+      }
+    });
+
+    console.log(`✅ Password reset email sent to: ${email}`);
+    
+    res.status(200).json({
+      success: true,
+      message: 'Password reset email sent successfully'
+    });
+
+  } catch (emailError) {
+    // Clear reset token if email fails
+    user.passwordResetToken = null;
+    user.passwordResetExpires = null;
+    await user.save();
+
+    console.error('❌ Failed to send reset email:', emailError.message);
+    return next(new AppError('Error sending password reset email. Please try again.', 500));
+  }
 });
 
 // @desc    Reset password
@@ -435,6 +806,26 @@ const resetPassword = catchAsync(async (req, res, next) => {
   user.passwordResetToken = null;
   user.passwordResetExpires = null;
   await user.save();
+
+  // 📧 Send password reset success email
+  try {
+    await sendEmail({
+      to: user.email,
+      subject: '✅ รหัสผ่านใหม่ของคุณพร้อมใช้งานแล้ว',
+      template: 'password-reset-success',
+      data: {
+        firstName: user.firstName,
+        lastName: user.lastName,
+        resetTime: new Date().toLocaleString('th-TH'),
+        loginUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/login`,
+        supportEmail: process.env.SUPPORT_EMAIL || 'support@lms.com'
+      }
+    });
+
+    console.log(`✅ Password reset success email sent to: ${user.email}`);
+  } catch (emailError) {
+    console.error('❌ Failed to send success email:', emailError.message);
+  }
 
   // Log activity
   try {
@@ -480,6 +871,24 @@ const verifyEmail = catchAsync(async (req, res, next) => {
   user.emailVerificationToken = null;
   await user.save();
 
+  // 📧 Send welcome email after verification
+  try {
+    await sendEmail({
+      to: user.email,
+      subject: '🎉 ยืนยันอีเมลสำเร็จ - ยินดีต้อนรับ!',
+      template: 'email-verified',
+      data: {
+        firstName: user.firstName,
+        lastName: user.lastName,
+        loginUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/login`
+      }
+    });
+
+    console.log(`✅ Email verification success email sent to: ${user.email}`);
+  } catch (emailError) {
+    console.error('❌ Failed to send verification success email:', emailError.message);
+  }
+
   res.status(200).json({
     success: true,
     message: 'Email verified successfully'
@@ -497,6 +906,8 @@ module.exports = {
   refreshToken,
   getMe,
   updateProfile,
+  uploadProfilePhoto,    // 🆕 NEW: Profile photo upload
+  deleteProfilePhoto,    // 🆕 NEW: Profile photo deletion
   changePassword,
   forgotPassword,
   resetPassword,

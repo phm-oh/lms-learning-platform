@@ -3,6 +3,7 @@
 
 const { User, Course, Quiz, Enrollment, UserActivity, LearningAnalytics } = require('../models');
 const { AppError, catchAsync } = require('../middleware/errorHandler');
+const { sendEmail } = require('../utils/emailService');
 const { Op } = require('sequelize');
 const sequelize = require('../config/database');
 
@@ -257,6 +258,7 @@ const approveTeacher = catchAsync(async (req, res, next) => {
     return next(new AppError('Only teacher accounts can be approved', 400));
   }
 
+  const oldStatus = user.status;
   user.status = status;
   await user.save();
 
@@ -274,10 +276,104 @@ const approveTeacher = catchAsync(async (req, res, next) => {
     userAgent: req.get('User-Agent')
   }).catch(() => {}); // Ignore if model doesn't exist
 
-  // Send notification (TODO: implement email)
-  const message = status === 'active' 
-    ? 'Your teacher account has been approved!' 
-    : 'Your teacher account has been rejected.';
+  // 📧 SEND EMAIL NOTIFICATION TO TEACHER
+  try {
+    if (status === 'active') {
+      // Teacher approved
+      await sendEmail({
+        to: user.email,
+        subject: '🎉 บัญชีครูผู้สอนของคุณได้รับการอนุมัติแล้ว!',
+        template: 'teacher-approved',
+        data: {
+          firstName: user.firstName,
+          lastName: user.lastName,
+          approvedBy: `${req.user.firstName} ${req.user.lastName}`,
+          approvedDate: new Date().toLocaleDateString('th-TH'),
+          loginUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/login`,
+          dashboardUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/teacher/dashboard`,
+          supportEmail: process.env.SUPPORT_EMAIL || 'support@lms.com',
+          guideUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/teacher/guide`
+        }
+      });
+
+      console.log(`✅ Teacher approval email sent to: ${user.email}`);
+
+    } else if (status === 'rejected') {
+      // Teacher rejected
+      await sendEmail({
+        to: user.email,
+        subject: '❌ การสมัครบัญชีครูผู้สอน',
+        template: 'teacher-rejected',
+        data: {
+          firstName: user.firstName,
+          lastName: user.lastName,
+          rejectedDate: new Date().toLocaleDateString('th-TH'),
+          supportEmail: process.env.SUPPORT_EMAIL || 'support@lms.com',
+          contactUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/contact`,
+          reapplyInfo: 'คุณสามารถติดต่อทีมงานเพื่อสอบถามรายละเอียดและสมัครใหม่ได้'
+        }
+      });
+
+      console.log(`✅ Teacher rejection email sent to: ${user.email}`);
+    }
+
+  } catch (emailError) {
+    console.error('❌ Failed to send teacher approval/rejection email:', emailError.message);
+    // Don't fail the approval process if email fails
+  }
+
+  // 📧 NOTIFY OTHER ADMINS ABOUT THE DECISION
+  try {
+    const otherAdmins = await User.findAll({
+      where: { 
+        role: 'admin', 
+        status: 'active',
+        id: { [Op.ne]: req.user.id } // Exclude current admin
+      }
+    });
+
+    for (const admin of otherAdmins) {
+      await sendEmail({
+        to: admin.email,
+        subject: `👨‍💼 การอนุมัติครู: ${user.firstName} ${user.lastName}`,
+        template: 'admin-teacher-decision-notification',
+        data: {
+          adminName: admin.firstName,
+          teacherName: `${user.firstName} ${user.lastName}`,
+          teacherEmail: user.email,
+          decision: status === 'active' ? 'อนุมัติ' : 'ปฏิเสธ',
+          decidedBy: `${req.user.firstName} ${req.user.lastName}`,
+          decisionDate: new Date().toLocaleDateString('th-TH'),
+          teacherManagementUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/admin/teachers`
+        }
+      });
+    }
+
+    console.log(`✅ Admin notification emails sent for teacher ${status}`);
+  } catch (emailError) {
+    console.error('❌ Failed to send admin notifications:', emailError.message);
+  }
+
+  // Emit socket event for real-time updates
+  const io = req.app.get('io');
+  if (io) {
+    io.to('admin-room').emit('teacher-status-updated', {
+      teacherId: user.id,
+      teacherName: `${user.firstName} ${user.lastName}`,
+      status: status,
+      updatedBy: req.user.id,
+      timestamp: new Date()
+    });
+
+    // Notify the teacher if they're online
+    io.to(`user-${user.id}`).emit('account-status-updated', {
+      status: status,
+      message: status === 'active' 
+        ? 'บัญชีครูของคุณได้รับการอนุมัติแล้ว! ยินดีต้อนรับ' 
+        : 'ขออภัย บัญชีครูของคุณไม่ได้รับการอนุมัติ',
+      timestamp: new Date()
+    });
+  }
 
   res.status(200).json({
     success: true,
@@ -288,7 +384,8 @@ const approveTeacher = catchAsync(async (req, res, next) => {
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,
-        status: user.status
+        status: user.status,
+        previousStatus: oldStatus
       }
     }
   });
@@ -299,7 +396,7 @@ const approveTeacher = catchAsync(async (req, res, next) => {
 // @access  Admin only
 const updateUserStatus = catchAsync(async (req, res, next) => {
   const { id } = req.params;
-  const { status } = req.body;
+  const { status, reason } = req.body;
 
   const validStatuses = ['active', 'inactive', 'suspended'];
   if (!validStatuses.includes(status)) {
@@ -316,6 +413,7 @@ const updateUserStatus = catchAsync(async (req, res, next) => {
     return next(new AppError('Cannot change admin status', 403));
   }
 
+  const oldStatus = user.status;
   user.status = status;
   await user.save();
 
@@ -326,12 +424,130 @@ const updateUserStatus = catchAsync(async (req, res, next) => {
     details: {
       targetUserId: user.id,
       newStatus: status,
+      oldStatus: oldStatus,
+      reason: reason || 'ไม่ระบุเหตุผล',
       updatedBy: req.user.id,
       timestamp: new Date()
     },
     ipAddress: req.ip,
     userAgent: req.get('User-Agent')
   }).catch(() => {});
+
+  // 📧 SEND STATUS UPDATE EMAIL TO USER
+  try {
+    const statusMessages = {
+      active: {
+        subject: '✅ บัญชีของคุณถูกเปิดใช้งานแล้ว',
+        title: 'บัญชีเปิดใช้งาน',
+        message: 'บัญชีของคุณได้รับการเปิดใช้งานแล้ว คุณสามารถเข้าสู่ระบบได้ตามปกติ',
+        action: 'เข้าสู่ระบบ',
+        actionUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/login`
+      },
+      inactive: {
+        subject: '⚠️ บัญชีของคุณถูกปิดใช้งานชั่วคราว',
+        title: 'บัญชีปิดใช้งาน',
+        message: 'บัญชีของคุณถูกปิดใช้งานชั่วคราว หากมีข้อสงสัยกรุณาติดต่อผู้ดูแลระบบ',
+        action: 'ติดต่อฝ่ายสนับสนุน',
+        actionUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/contact`
+      },
+      suspended: {
+        subject: '🚫 บัญชีของคุณถูกระงับการใช้งาน',
+        title: 'บัญชีถูกระงับ',
+        message: 'บัญชีของคุณถูกระงับการใช้งาน เนื่องจากการกระทำที่ไม่เหมาะสม',
+        action: 'ติดต่อฝ่ายสนับสนุน',
+        actionUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/contact`
+      }
+    };
+
+    const statusInfo = statusMessages[status];
+    
+    await sendEmail({
+      to: user.email,
+      subject: statusInfo.subject,
+      template: 'user-status-update',
+      data: {
+        firstName: user.firstName,
+        lastName: user.lastName,
+        statusTitle: statusInfo.title,
+        statusMessage: statusInfo.message,
+        reason: reason || 'ไม่ระบุเหตุผล',
+        updatedBy: `${req.user.firstName} ${req.user.lastName}`,
+        updateDate: new Date().toLocaleDateString('th-TH'),
+        actionText: statusInfo.action,
+        actionUrl: statusInfo.actionUrl,
+        supportEmail: process.env.SUPPORT_EMAIL || 'support@lms.com'
+      }
+    });
+
+    console.log(`✅ Status update email sent to: ${user.email} (${status})`);
+
+  } catch (emailError) {
+    console.error('❌ Failed to send status update email:', emailError.message);
+  }
+
+  // 📧 NOTIFY OTHER ADMINS ABOUT STATUS CHANGE (except for routine activations)
+  if (status !== 'active' || oldStatus === 'suspended') {
+    try {
+      const otherAdmins = await User.findAll({
+        where: { 
+          role: 'admin', 
+          status: 'active',
+          id: { [Op.ne]: req.user.id }
+        }
+      });
+
+      for (const admin of otherAdmins) {
+        await sendEmail({
+          to: admin.email,
+          subject: `🔄 การเปลี่ยนสถานะผู้ใช้: ${user.firstName} ${user.lastName}`,
+          template: 'admin-user-status-notification',
+          data: {
+            adminName: admin.firstName,
+            targetUserName: `${user.firstName} ${user.lastName}`,
+            targetUserEmail: user.email,
+            targetUserRole: user.role,
+            oldStatus: oldStatus,
+            newStatus: status,
+            reason: reason || 'ไม่ระบุเหตุผล',
+            updatedBy: `${req.user.firstName} ${req.user.lastName}`,
+            updateDate: new Date().toLocaleDateString('th-TH'),
+            userManagementUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/admin/users`
+          }
+        });
+      }
+
+      console.log(`✅ Admin notification emails sent for status change`);
+    } catch (emailError) {
+      console.error('❌ Failed to send admin status notifications:', emailError.message);
+    }
+  }
+
+  // Emit socket events
+  const io = req.app.get('io');
+  if (io) {
+    // Notify admins
+    io.to('admin-room').emit('user-status-updated', {
+      userId: user.id,
+      userName: `${user.firstName} ${user.lastName}`,
+      role: user.role,
+      oldStatus: oldStatus,
+      newStatus: status,
+      updatedBy: req.user.id,
+      timestamp: new Date()
+    });
+
+    // Notify the user if they're online
+    io.to(`user-${user.id}`).emit('account-status-updated', {
+      status: status,
+      reason: reason,
+      message: status === 'active' 
+        ? 'บัญชีของคุณถูกเปิดใช้งานแล้ว' 
+        : status === 'inactive'
+        ? 'บัญชีของคุณถูกปิดใช้งานชั่วคราว'
+        : 'บัญชีของคุณถูกระงับการใช้งาน',
+      timestamp: new Date()
+    });
+  }
 
   res.status(200).json({
     success: true,
@@ -342,7 +558,9 @@ const updateUserStatus = catchAsync(async (req, res, next) => {
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,
-        status: user.status
+        role: user.role,
+        status: user.status,
+        previousStatus: oldStatus
       }
     }
   });

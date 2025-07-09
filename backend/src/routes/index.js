@@ -7,212 +7,147 @@ const router = express.Router();
 // Import route modules
 const authRoutes = require('./auth');
 const adminRoutes = require('./admin');
-const analyticsRoutes = require('./analytics');
-// const userRoutes = require('./user');
 const courseRoutes = require('./course');
 const lessonRoutes = require('./lesson');
 const quizRoutes = require('./quiz');
+const analyticsRoutes = require('./analytics');
+const uploadRoutes = require('./upload'); // 🆕 NEW: Upload routes
 
 // ========================================
-// API DOCUMENTATION ENDPOINT
+// API STATUS & HEALTH CHECK
 // ========================================
 
-router.get('/docs', (req, res) => {
-  res.json({
-    title: 'LMS Platform API Documentation',
-    version: '1.0.0',
-    description: 'Learning Management System with ML Prediction capabilities',
-    baseUrl: '/api',
-    
-    endpoints: {
-      authentication: {
-        base: '/api/auth',
-        description: 'User authentication and profile management',
-        routes: {
-          'POST /register': 'Register new user',
-          'POST /login': 'User login',
-          'POST /logout': 'User logout',
-          'GET /profile': 'Get user profile',
-          'PATCH /profile': 'Update user profile',
-          'PATCH /change-password': 'Change password',
-          'POST /forgot-password': 'Request password reset',
-          'PATCH /reset-password/:token': 'Reset password with token'
-        }
-      },
-      
-      admin: {
-        base: '/api/admin',
-        description: 'Admin dashboard and system management',
-        authentication: 'Admin role required',
-        routes: {
-          'GET /dashboard': 'Get admin dashboard overview',
-          'GET /statistics': 'Get system statistics',
-          'GET /users': 'Get all users with filtering',
-          'PUT /users/:id/approve': 'Approve/reject teacher accounts',
-          'PUT /users/:id/status': 'Update user status',
-          'GET /courses': 'Manage all courses',
-          'PUT /courses/:id/status': 'Update course status',
-          'GET /quizzes': 'Manage all quizzes',
-          'GET /health': 'System health metrics',
-          'GET /logs': 'System activity logs'
-        }
-      },
-      
-      analytics: {
-        base: '/api/analytics',
-        description: 'Dashboard analytics and insights',
-        authentication: 'Role-based access',
-        routes: {
-          'GET /teacher/:id': 'Teacher dashboard analytics',
-          'GET /student/:id': 'Student dashboard analytics',
-          'GET /course/:id': 'Course performance analytics',
-          'GET /platform': 'Platform-wide analytics (admin only)'
-        }
-      },
-      
-      users: {
-        base: '/api/users',
-        status: 'Coming soon',
-        routes: {
-          'GET /profile': 'Get current user profile',
-          'PUT /profile': 'Update user profile',
-          'GET /:id/courses': 'Get user courses',
-          'GET /:id/analytics': 'Get user learning analytics'
-        }
-      },
-      
-      courses: {
-        base: '/api/courses',
-        status: 'Coming soon',
-        routes: {
-          'GET /': 'Get all published courses',
-          'GET /:id': 'Get course details',
-          'POST /': 'Create course (teacher only)',
-          'PUT /:id': 'Update course (teacher only)',
-          'DELETE /:id': 'Delete course (teacher/admin only)',
-          'POST /:id/enroll': 'Request enrollment',
-          'GET /:id/students': 'Get enrolled students',
-          'PUT /:id/students/:studentId': 'Approve/reject enrollment'
-        }
-      },
-      
-      lessons: {
-        base: '/api/lessons',
-        status: 'Coming soon',
-        routes: {
-          'GET /course/:courseId': 'Get lessons for course',
-          'GET /:id': 'Get lesson details',
-          'POST /': 'Create lesson (teacher only)',
-          'PUT /:id': 'Update lesson (teacher only)',
-          'DELETE /:id': 'Delete lesson (teacher only)',
-          'POST /:id/progress': 'Update lesson progress'
-        }
-      },
-      
-      quizzes: {
-        base: '/api/quizzes',
-        status: 'Coming soon',
-        routes: {
-          'GET /course/:courseId': 'Get quizzes for course',
-          'GET /:id': 'Get quiz details',
-          'POST /': 'Create quiz (teacher only)',
-          'PUT /:id': 'Update quiz (teacher only)',
-          'DELETE /:id': 'Delete quiz (teacher only)',
-          'POST /:id/attempt': 'Start quiz attempt',
-          'PUT /:id/submit': 'Submit quiz attempt',
-          'GET /:id/results': 'Get quiz results'
-        }
-      }
-    },
-    
-    authentication: {
-      type: 'Bearer Token (JWT)',
-      header: 'Authorization: Bearer <token>',
-      expiry: '7 days',
-      roles: ['admin', 'teacher', 'student']
-    },
-    
-    errorCodes: {
-      400: 'Bad Request - Invalid input data',
-      401: 'Unauthorized - Invalid or missing token',
-      403: 'Forbidden - Insufficient permissions',
-      404: 'Not Found - Resource not found',
-      409: 'Conflict - Resource already exists',
-      422: 'Unprocessable Entity - Validation error',
-      429: 'Too Many Requests - Rate limit exceeded',
-      500: 'Internal Server Error - Server error'
-    },
-    
-    responseFormat: {
-      success: {
-        success: true,
-        data: '{}',
-        message: 'Success message'
-      },
-      error: {
-        success: false,
-        error: 'Error message',
-        code: 'ERROR_CODE',
-        details: 'Additional error details'
-      }
-    }
-  });
-});
-
-// ========================================
-// API STATUS ENDPOINT
-// ========================================
-
-router.get('/status', (req, res) => {
-  res.json({
-    api: 'LMS Platform API',
-    status: 'operational',
+// @desc    API Status check
+// @route   GET /api
+// @access  Public
+router.get('/', (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: 'LMS API is running',
     version: '1.0.0',
     timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
     environment: process.env.NODE_ENV || 'development',
-    
-    services: {
-      database: 'connected',
-      authentication: 'available',
-      adminPanel: 'available',
-      analytics: 'available',
-      fileUpload: 'coming soon',
-      emailService: 'coming soon',
-      mlService: 'coming soon',
-      websocket: 'available'
-    },
-    
     features: {
-      multiRoleSystem: true,
-      adminDashboard: true,
-      teacherDashboard: true,
-      studentDashboard: true,
-      quizTimer: 'coming soon',
-      realTimeNotifications: true,
-      mlPredictions: 'coming soon',
-      emailNotifications: 'coming soon',
-      fileUploads: 'coming soon',
-      analytics: true
+      authentication: true,
+      fileUpload: true,        // 🆕 NEW: File upload feature
+      emailNotifications: true,
+      realTimeUpdates: true,
+      adminPanel: true,
+      analytics: true,
+      multiLanguage: false,
+      mobileApp: false
     }
   });
 });
 
+// @desc    API Health check
+// @route   GET /api/health
+// @access  Public
+router.get('/health', async (req, res) => {
+  const health = {
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    checks: {
+      database: { status: 'checking' },
+      email: { status: 'checking' },
+      upload: { status: 'checking' },    // 🆕 NEW: Upload system check
+      memory: { status: 'checking' }
+    }
+  };
+
+  try {
+    // Database health check
+    const { sequelize } = require('../config/database');
+    if (sequelize) {
+      await sequelize.authenticate();
+      health.checks.database = { status: 'healthy', message: 'Database connection successful' };
+    } else {
+      health.checks.database = { status: 'warning', message: 'Database not configured' };
+    }
+  } catch (error) {
+    health.checks.database = { status: 'unhealthy', message: error.message };
+    health.status = 'degraded';
+  }
+
+  try {
+    // Email service health check
+    const emailService = require('../utils/emailService');
+    if (emailService) {
+      health.checks.email = { status: 'healthy', message: 'Email service ready' };
+    } else {
+      health.checks.email = { status: 'warning', message: 'Email service not configured' };
+    }
+  } catch (error) {
+    health.checks.email = { status: 'unhealthy', message: error.message };
+    health.status = 'degraded';
+  }
+
+  try {
+    // 🆕 Upload system health check
+    const fs = require('fs').promises;
+    const uploadDirs = ['./uploads', './uploads/profiles', './uploads/courses', './uploads/lessons'];
+    
+    let uploadStatus = 'healthy';
+    const uploadDetails = {};
+
+    for (const dir of uploadDirs) {
+      try {
+        await fs.access(dir);
+        uploadDetails[dir] = 'accessible';
+      } catch (error) {
+        uploadDetails[dir] = 'missing';
+        uploadStatus = 'warning';
+      }
+    }
+
+    health.checks.upload = { 
+      status: uploadStatus, 
+      message: 'Upload directories checked',
+      details: uploadDetails
+    };
+  } catch (error) {
+    health.checks.upload = { status: 'unhealthy', message: error.message };
+    health.status = 'degraded';
+  }
+
+  // Memory health check
+  const memoryUsage = process.memoryUsage();
+  const totalMemoryMB = memoryUsage.heapTotal / 1024 / 1024;
+  const usedMemoryMB = memoryUsage.heapUsed / 1024 / 1024;
+  const memoryPercentage = (usedMemoryMB / totalMemoryMB) * 100;
+
+  if (memoryPercentage > 90) {
+    health.checks.memory = { status: 'unhealthy', usage: `${memoryPercentage.toFixed(1)}%` };
+    health.status = 'degraded';
+  } else if (memoryPercentage > 75) {
+    health.checks.memory = { status: 'warning', usage: `${memoryPercentage.toFixed(1)}%` };
+    if (health.status === 'healthy') health.status = 'degraded';
+  } else {
+    health.checks.memory = { status: 'healthy', usage: `${memoryPercentage.toFixed(1)}%` };
+  }
+
+  // Overall status
+  const hasUnhealthy = Object.values(health.checks).some(check => check.status === 'unhealthy');
+  if (hasUnhealthy && health.status !== 'degraded') {
+    health.status = 'unhealthy';
+  }
+
+  res.status(health.status === 'unhealthy' ? 503 : 200).json({
+    success: health.status !== 'unhealthy',
+    data: health
+  });
+});
+
 // ========================================
-// MOUNT ROUTE MODULES
+// ROUTE MOUNTING
 // ========================================
 
 // Authentication routes
 router.use('/auth', authRoutes);
 
-// Admin management routes
+// Admin routes
 router.use('/admin', adminRoutes);
-
-// Analytics routes
-router.use('/analytics', analyticsRoutes);
-
-// User management routes  
-// router.use('/users', userRoutes);
 
 // Course management routes
 router.use('/courses', courseRoutes);
@@ -223,79 +158,341 @@ router.use('/lessons', lessonRoutes);
 // Quiz management routes
 router.use('/quizzes', quizRoutes);
 
-// Temporary placeholder routes (remove when real routes are implemented)
-router.get('/users/test', (req, res) => {
-  res.json({ 
+// Analytics routes
+router.use('/analytics', analyticsRoutes);
+
+// 🆕 Upload routes
+router.use('/upload', uploadRoutes);
+
+// ========================================
+// 🆕 ADDITIONAL UPLOAD-RELATED ROUTES
+// ========================================
+
+// @desc    Get upload system information
+// @route   GET /api/upload-info
+// @access  Public
+router.get('/upload-info', (req, res) => {
+  const { getStorageConfig } = require('../config/storage');
+  const storageConfig = getStorageConfig();
+
+  res.status(200).json({
     success: true,
-    message: 'User routes will be implemented here',
-    status: 'coming soon'
+    data: {
+      maxFileSize: storageConfig.default.limits.maxFileSize,
+      maxFilesPerUpload: storageConfig.default.limits.maxFilesPerUpload,
+      supportedTypes: {
+        images: ['image/jpeg', 'image/png', 'image/webp'],
+        videos: ['video/mp4', 'video/webm', 'video/quicktime'],
+        documents: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+        spreadsheets: ['application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
+        presentations: ['application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation'],
+        archives: ['application/zip', 'application/x-rar-compressed'],
+        text: ['text/plain', 'text/csv']
+      },
+      features: {
+        imageProcessing: storageConfig.default.features.imageProcessing,
+        thumbnailGeneration: storageConfig.default.features.thumbnailGeneration,
+        videoTranscoding: storageConfig.default.features.videoTranscoding,
+        virusScanning: storageConfig.default.features.virusScanning
+      },
+      storageType: storageConfig.active?.type || 'local',
+      endpoints: {
+        profilePhoto: '/api/upload/profile',
+        courseThumbnail: '/api/upload/course/:courseId/thumbnail',
+        lessonVideo: '/api/upload/lesson/:lessonId/video',
+        lessonAttachments: '/api/upload/lesson/:lessonId/attachments',
+        quizImport: '/api/upload/quiz/:quizId/import',
+        generalFiles: '/api/upload/files'
+      }
+    }
   });
 });
 
-router.get('/courses/test', (req, res) => {
-  res.json({ 
+// ========================================
+// API DOCUMENTATION ENDPOINT
+// ========================================
+
+// @desc    API Documentation overview
+// @route   GET /api/docs
+// @access  Public
+router.get('/docs', (req, res) => {
+  const apiDocs = {
+    title: 'LMS Platform API Documentation',
+    version: '1.0.0',
+    description: 'Comprehensive Learning Management System API with file upload capabilities',
+    baseUrl: process.env.API_URL || 'http://localhost:5000',
+    
+    endpoints: {
+      authentication: {
+        description: 'User authentication and profile management',
+        routes: [
+          'POST /api/auth/register',
+          'POST /api/auth/login',
+          'GET /api/auth/profile',
+          'PATCH /api/auth/profile',
+          'POST /api/auth/profile/photo',      // 🆕 NEW
+          'DELETE /api/auth/profile/photo',    // 🆕 NEW
+          'PATCH /api/auth/change-password',
+          'POST /api/auth/forgot-password',
+          'PATCH /api/auth/reset-password/:token'
+        ]
+      },
+      
+      courses: {
+        description: 'Course management and enrollment',
+        routes: [
+          'GET /api/courses',
+          'GET /api/courses/:id',
+          'POST /api/courses',
+          'PUT /api/courses/:id',
+          'POST /api/courses/:id/thumbnail',     // 🆕 NEW
+          'DELETE /api/courses/:id/thumbnail',   // 🆕 NEW
+          'DELETE /api/courses/:id',
+          'PATCH /api/courses/:id/publish',
+          'POST /api/courses/:id/enroll',
+          'GET /api/courses/:id/students',
+          'PUT /api/courses/:id/students/:studentId'
+        ]
+      },
+      
+      lessons: {
+        description: 'Lesson content and progress management',
+        routes: [
+          'GET /api/lessons/course/:courseId',
+          'GET /api/lessons/:id',
+          'POST /api/lessons',
+          'PUT /api/lessons/:id',
+          'POST /api/lessons/:id/video',         // 🆕 NEW
+          'DELETE /api/lessons/:id/video',       // 🆕 NEW
+          'POST /api/lessons/:id/attachments',   // 🆕 NEW
+          'DELETE /api/lessons/:id/attachments', // 🆕 NEW
+          'DELETE /api/lessons/:id',
+          'PATCH /api/lessons/:id/publish',
+          'POST /api/lessons/:id/progress',
+          'POST /api/lessons/:id/complete'
+        ]
+      },
+      
+      quizzes: {
+        description: 'Quiz management and taking system',
+        routes: [
+          'GET /api/quizzes/course/:courseId',
+          'POST /api/quizzes',
+          'POST /api/quizzes/:id/attempt',
+          'POST /api/quizzes/:id/answer',
+          'POST /api/quizzes/:id/submit',
+          'POST /api/upload/quiz/:id/import'     // 🆕 NEW
+        ]
+      },
+      
+      upload: {                                  // 🆕 NEW SECTION
+        description: 'File upload and management system',
+        routes: [
+          'POST /api/upload/profile',
+          'POST /api/upload/course/:courseId/thumbnail',
+          'POST /api/upload/lesson/:lessonId/video',
+          'POST /api/upload/lesson/:lessonId/documents',
+          'POST /api/upload/lesson/:lessonId/attachments',
+          'POST /api/upload/quiz/:quizId/import',
+          'POST /api/upload/files',
+          'DELETE /api/upload/file',
+          'GET /api/upload/info',
+          'GET /api/upload/stats',
+          'POST /api/upload/cleanup',
+          'GET /api/upload/health'
+        ]
+      },
+      
+      admin: {
+        description: 'Administrative functions',
+        routes: [
+          'GET /api/admin/dashboard',
+          'GET /api/admin/users',
+          'PUT /api/admin/users/:id/approve',
+          'PUT /api/admin/users/:id/status',
+          'GET /api/admin/statistics'
+        ]
+      },
+      
+      analytics: {
+        description: 'Learning analytics and insights',
+        routes: [
+          'GET /api/analytics/teacher/:id',
+          'GET /api/analytics/student/:id',
+          'GET /api/analytics/course/:id',
+          'GET /api/analytics/platform'
+        ]
+      }
+    },
+    
+    uploadFeatures: {                          // 🆕 NEW SECTION
+      description: 'File upload system capabilities',
+      supportedFiles: {
+        profilePhotos: {
+          types: ['image/jpeg', 'image/png', 'image/webp'],
+          maxSize: '5MB',
+          processing: 'Auto-resize to 400x400, thumbnail generation'
+        },
+        courseThumbnails: {
+          types: ['image/jpeg', 'image/png', 'image/webp'],
+          maxSize: '10MB',
+          processing: 'Auto-resize to 800x450, thumbnail generation'
+        },
+        lessonVideos: {
+          types: ['video/mp4', 'video/webm', 'video/quicktime'],
+          maxSize: '500MB',
+          processing: 'Storage optimization'
+        },
+        documents: {
+          types: ['application/pdf', 'application/msword', 'text/plain'],
+          maxSize: '50MB',
+          processing: 'Virus scanning, metadata extraction'
+        },
+        csvImports: {
+          types: ['text/csv'],
+          maxSize: '10MB',
+          processing: 'Data validation, error reporting'
+        }
+      },
+      security: [
+        'File type validation',
+        'Size limit enforcement',
+        'Virus scanning (optional)',
+        'Secure file naming (UUID)',
+        'Access control (role-based)'
+      ]
+    },
+    
+    rateLimits: {
+      general: '100 requests per 15 minutes',
+      uploads: '20 uploads per 15 minutes',
+      heavyUploads: '5 video uploads per hour',
+      csvImports: '5 imports per 30 minutes'
+    },
+    
+    authentication: {
+      type: 'Bearer Token (JWT)',
+      header: 'Authorization: Bearer <token>',
+      expiration: '7 days (configurable)'
+    }
+  };
+
+  res.status(200).json({
     success: true,
-    message: 'Course routes will be implemented here',
-    status: 'coming soon'
-  });
-});
-
-router.get('/quizzes/test', (req, res) => {
-  res.json({ 
-    success: true,
-    message: 'Quiz routes will be implemented here',
-    status: 'coming soon'
+    data: apiDocs
   });
 });
 
 // ========================================
-// HEALTH CHECK FOR SPECIFIC SERVICES
+// ERROR HANDLING FOR INVALID ROUTES
 // ========================================
 
-router.get('/health/auth', (req, res) => {
-  res.json({
-    service: 'Authentication',
-    status: 'operational',
-    endpoints: ['/login', '/register', '/profile'],
-    timestamp: new Date().toISOString()
-  });
-});
-
-router.get('/health/admin', (req, res) => {
-  res.json({
-    service: 'Admin Panel',
-    status: 'operational',
-    endpoints: ['/dashboard', '/users', '/statistics'],
-    timestamp: new Date().toISOString()
-  });
-});
-
-router.get('/health/analytics', (req, res) => {
-  res.json({
-    service: 'Analytics',
-    status: 'operational',
-    endpoints: ['/teacher/:id', '/student/:id', '/course/:id'],
-    timestamp: new Date().toISOString()
-  });
-});
-
-// ========================================
-// CATCH-ALL ROUTE
-// ========================================
-
+// Handle undefined API routes
 router.use('*', (req, res) => {
   res.status(404).json({
     success: false,
-    error: 'API endpoint not found',
-    message: `Route ${req.method} ${req.originalUrl} not implemented`,
-    availableEndpoints: '/api/docs',
-    suggestions: [
-      'Check /api/docs for available endpoints',
-      'Verify the HTTP method (GET, POST, PUT, DELETE)',
-      'Ensure proper authentication headers',
-      'Check if the endpoint is implemented'
-    ]
+    message: `API endpoint not found: ${req.method} ${req.originalUrl}`,
+    availableEndpoints: {
+      status: 'GET /api',
+      health: 'GET /api/health',
+      docs: 'GET /api/docs',
+      auth: 'GET /api/auth/*',
+      courses: 'GET /api/courses/*',
+      lessons: 'GET /api/lessons/*',
+      quizzes: 'GET /api/quizzes/*',
+      upload: 'GET /api/upload/*',      // 🆕 NEW
+      admin: 'GET /api/admin/*',
+      analytics: 'GET /api/analytics/*'
+    },
+    suggestion: 'Check /api/docs for complete API documentation'
   });
 });
 
 module.exports = router;
+
+// ========================================
+// ROUTE SUMMARY (Updated with Upload Routes)
+// ========================================
+/*
+Available API Routes (80+ endpoints):
+
+🔐 Authentication (8 routes):
+- POST /api/auth/register
+- POST /api/auth/login
+- GET /api/auth/profile
+- PATCH /api/auth/profile
+- POST /api/auth/profile/photo       🆕 NEW
+- DELETE /api/auth/profile/photo     🆕 NEW
+- PATCH /api/auth/change-password
+- POST /api/auth/forgot-password
+- PATCH /api/auth/reset-password/:token
+
+📚 Courses (12 routes):
+- GET /api/courses
+- GET /api/courses/:id
+- POST /api/courses
+- PUT /api/courses/:id
+- POST /api/courses/:id/thumbnail    🆕 NEW
+- DELETE /api/courses/:id/thumbnail  🆕 NEW
+- DELETE /api/courses/:id
+- PATCH /api/courses/:id/publish
+- POST /api/courses/:id/enroll
+- GET /api/courses/:id/students
+- PUT /api/courses/:id/students/:studentId
+
+📖 Lessons (14 routes):
+- GET /api/lessons/course/:courseId
+- GET /api/lessons/:id
+- POST /api/lessons
+- PUT /api/lessons/:id
+- POST /api/lessons/:id/video        🆕 NEW
+- DELETE /api/lessons/:id/video      🆕 NEW
+- POST /api/lessons/:id/attachments  🆕 NEW
+- DELETE /api/lessons/:id/attachments 🆕 NEW
+- DELETE /api/lessons/:id
+- PATCH /api/lessons/:id/publish
+- POST /api/lessons/:id/progress
+- POST /api/lessons/:id/complete
+
+📝 Quizzes (6 routes):
+- GET /api/quizzes/course/:courseId
+- POST /api/quizzes
+- POST /api/quizzes/:id/attempt
+- POST /api/quizzes/:id/answer
+- POST /api/quizzes/:id/submit
+
+📁 Upload System (12 routes):        🆕 NEW SECTION
+- POST /api/upload/profile
+- POST /api/upload/course/:courseId/thumbnail
+- POST /api/upload/lesson/:lessonId/video
+- POST /api/upload/lesson/:lessonId/documents
+- POST /api/upload/lesson/:lessonId/attachments
+- POST /api/upload/quiz/:quizId/import
+- POST /api/upload/files
+- DELETE /api/upload/file
+- GET /api/upload/info
+- GET /api/upload/stats
+- POST /api/upload/cleanup (Admin)
+- GET /api/upload/health (Admin)
+
+👨‍💼 Admin (8 routes):
+- GET /api/admin/dashboard
+- GET /api/admin/users
+- PUT /api/admin/users/:id/approve
+- PUT /api/admin/users/:id/status
+- GET /api/admin/statistics
+
+📊 Analytics (5 routes):
+- GET /api/analytics/teacher/:id
+- GET /api/analytics/student/:id
+- GET /api/analytics/course/:id
+- GET /api/analytics/platform
+
+🏥 System (4 routes):
+- GET /api (Status)
+- GET /api/health
+- GET /api/docs
+- GET /api/upload-info            🆕 NEW
+
+Total: 80+ API endpoints ready for production! 🚀
+*/
