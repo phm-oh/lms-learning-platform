@@ -9,9 +9,9 @@ const authRoutes = require('./auth');
 const adminRoutes = require('./admin');
 const analyticsRoutes = require('./analytics');
 // const userRoutes = require('./user');
-// const courseRoutes = require('./course');
-// const lessonRoutes = require('./lesson');
-// const quizRoutes = require('./quiz');
+const courseRoutes = require('./course');
+const lessonRoutes = require('./lesson');
+const quizRoutes = require('./quiz');
 
 // ========================================
 // API DOCUMENTATION ENDPOINT
@@ -215,13 +215,13 @@ router.use('/analytics', analyticsRoutes);
 // router.use('/users', userRoutes);
 
 // Course management routes
-// router.use('/courses', courseRoutes);
+router.use('/courses', courseRoutes);
 
 // Lesson management routes
-// router.use('/lessons', lessonRoutes);
+router.use('/lessons', lessonRoutes);
 
 // Quiz management routes
-// router.use('/quizzes', quizRoutes);
+router.use('/quizzes', quizRoutes);
 
 // Temporary placeholder routes (remove when real routes are implemented)
 router.get('/users/test', (req, res) => {
