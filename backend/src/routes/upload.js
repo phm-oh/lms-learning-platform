@@ -4,18 +4,22 @@
 const express = require('express');
 
 // Try to import middleware and controllers - handle gracefully if not available
-let authenticate, authorize;
+let authenticate, restrictTo, isTeacherOrAdmin, isAdmin;
 try {
   const auth = require('../middleware/auth');
   authenticate = auth.authenticate || auth.protect;
-  authorize = auth.authorize;
+  restrictTo = auth.restrictTo;
+  isTeacherOrAdmin = auth.isTeacherOrAdmin;
+  isAdmin = auth.isAdmin;
 } catch (error) {
   console.log('Auth middleware not available, using mock');
   authenticate = (req, res, next) => {
     req.user = { id: 1, role: 'admin' }; // Mock user
     next();
   };
-  authorize = (roles) => (req, res, next) => next();
+  restrictTo = (...roles) => (req, res, next) => next();
+  isTeacherOrAdmin = (req, res, next) => next();
+  isAdmin = (req, res, next) => next();
 }
 
 let uploadMiddlewares = {};
@@ -155,7 +159,7 @@ router.post('/profile',
 // @access  Teacher/Admin
 router.post('/course/:courseId/thumbnail',
   authenticate,
-  authorize(['teacher', 'admin']),
+  isTeacherOrAdmin,
   uploadRateLimit,
   uploadCourseThumbnail,
   safeUploadHandler('uploadCourseThumbnail', {
@@ -173,7 +177,7 @@ router.post('/course/:courseId/thumbnail',
 // @access  Teacher/Admin
 router.post('/lesson/:lessonId/video',
   authenticate,
-  authorize(['teacher', 'admin']),
+  isTeacherOrAdmin,
   heavyUploadRateLimit,
   uploadLessonVideo,
   safeUploadHandler('uploadLessonVideo', {
@@ -188,7 +192,7 @@ router.post('/lesson/:lessonId/video',
 // @access  Teacher/Admin
 router.post('/lesson/:lessonId/documents',
   authenticate,
-  authorize(['teacher', 'admin']),
+  isTeacherOrAdmin,
   uploadRateLimit,
   uploadLessonDocuments,
   safeUploadHandler('uploadLessonAttachments', {
@@ -202,7 +206,7 @@ router.post('/lesson/:lessonId/documents',
 // @access  Teacher/Admin
 router.post('/lesson/:lessonId/attachments',
   authenticate,
-  authorize(['teacher', 'admin']),
+  isTeacherOrAdmin,
   uploadRateLimit,
   uploadLessonAttachments,
   safeUploadHandler('uploadLessonAttachments', {
@@ -220,7 +224,7 @@ router.post('/lesson/:lessonId/attachments',
 // @access  Teacher/Admin
 router.post('/quiz/:quizId/import',
   authenticate,
-  authorize(['teacher', 'admin']),
+  isTeacherOrAdmin,
   csvImportRateLimit,
   uploadQuizCSV,
   safeUploadHandler('importQuizCSV', {
@@ -239,7 +243,7 @@ router.post('/quiz/:quizId/import',
 // @access  Student
 router.post('/assignment/:assignmentId/submission',
   authenticate,
-  authorize(['student']),
+  restrictTo('student'),
   uploadRateLimit,
   uploadAssignmentSubmission,
   safeUploadHandler('uploadAssignmentSubmission', {
@@ -321,7 +325,7 @@ router.get('/stats',
 // @access  Admin only
 router.post('/cleanup',
   authenticate,
-  authorize(['admin']),
+  isAdmin,
   safeUploadHandler('cleanupTempFiles', {
     cleaned: 25,
     freedSpace: '125MB'
@@ -333,7 +337,7 @@ router.post('/cleanup',
 // @access  Admin only
 router.get('/health',
   authenticate,
-  authorize(['admin']),
+  isAdmin,
   async (req, res) => {
     try {
       const health = {

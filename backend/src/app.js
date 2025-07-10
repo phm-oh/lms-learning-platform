@@ -10,8 +10,8 @@ const http = require('http');
 const socketIo = require('socket.io');
 
 // Import middleware
-const { globalErrorHandler } = require('./middleware/errorHandler');
-const { globalRateLimit } = require('./middleware/rateLimit');
+const { errorHandler } = require('./middleware/errorHandler');
+const { generalLimiter } = require('./middleware/rateLimit');
 
 // Import routes
 const apiRoutes = require('./routes');
@@ -191,7 +191,7 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 // Global rate limiting
-app.use(globalRateLimit);
+app.use(generalLimiter);
 
 // ========================================
 // 🆕 STATIC FILE SERVING
@@ -392,7 +392,7 @@ app.all('*', (req, res) => {
 });
 
 // Global error handling middleware
-app.use(globalErrorHandler);
+app.use(errorHandler);
 
 // ========================================
 // 🆕 SCHEDULED CLEANUP TASKS

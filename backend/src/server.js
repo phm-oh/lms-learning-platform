@@ -1,7 +1,7 @@
 // File: backend/src/server.js
 // Path: backend/src/server.js
 
-const app = require('./app');
+const {app} = require('./app');
 const http = require('http');
 const socketIo = require('socket.io');
 const sequelize = require('./config/database');
