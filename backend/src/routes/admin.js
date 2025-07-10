@@ -29,11 +29,15 @@ router.use(roleBasedLimiter);
 // HELPER FUNCTION FOR SAFE ROUTING
 // ========================================
 
-const safeAdminHandler = (controllerMethod, mockData = {}) => {
+// Fixed safeAdminHandler
+const safeAdminHandler = (controllerMethod, mockDataFunction = {}) => {
   return (req, res, next) => {
     if (adminController && typeof adminController[controllerMethod] === 'function') {
       return adminController[controllerMethod](req, res, next);
     } else {
+      // If mockDataFunction is a function, call it with req to get dynamic data
+      const mockData = typeof mockDataFunction === 'function' ? mockDataFunction(req) : mockDataFunction;
+      
       // Return mock data if controller not available
       return res.json({
         success: true,

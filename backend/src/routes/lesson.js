@@ -19,11 +19,14 @@ try {
 }
 
 // Helper function for safe routing
-const safeLessonHandler = (controllerMethod, mockData = {}) => {
+const safeLessonHandler = (controllerMethod, mockDataFunction) => {
   return (req, res, next) => {
     if (lessonController && typeof lessonController[controllerMethod] === 'function') {
       return lessonController[controllerMethod](req, res, next);
     } else {
+      // If mockDataFunction is a function, call it with req to get dynamic data
+      const mockData = typeof mockDataFunction === 'function' ? mockDataFunction(req) : mockDataFunction;
+      
       return res.json({
         success: true,
         data: {
@@ -55,7 +58,7 @@ router.get('/course/:courseId',
     req.params.courseId = parseInt(req.params.courseId);
     next();
   },
-  safeLessonHandler('getCourseActions', {
+  safeLessonHandler('getCourseActions', (req) => ({
     lessons: [
       {
         id: 1,
@@ -93,16 +96,16 @@ router.get('/course/:courseId',
       }
     ],
     total: 2
-  })
+  }))
 );
 
 // Get single lesson details
 router.get('/:id',
   validateParams(paramSchemas.id),
   isEnrolledOrTeacher,
-  safeLessonHandler('getLesson', {
+  safeLessonHandler('getLesson', (req) => ({
     lesson: {
-      id: parseInt(req.params?.id) || 1,
+      id: parseInt(req.params.id),
       title: 'Mock Lesson Details',
       description: 'This is a detailed mock lesson for testing',
       content: '<h2>Lesson Content</h2><p>This is where the lesson content would be displayed...</p>',
@@ -132,9 +135,8 @@ router.get('/:id',
         lastAccessed: new Date(),
         notes: 'Great lesson so far!'
       } : null
-    },
-    canManage: req.user?.role !== 'student'
-  })
+    }
+  }))
 );
 
 // ========================================
@@ -143,40 +145,37 @@ router.get('/:id',
 
 // Create new lesson
 router.post('/',
-  isTeacherOrAdmin,
   contentCreationLimiter,
+  isTeacherOrAdmin,
   validate({
     courseId: require('joi').number().integer().positive().required(),
     title: require('joi').string().min(3).max(255).required(),
     description: require('joi').string().max(1000).optional().allow(''),
     content: require('joi').string().optional().allow(''),
-    lessonType: require('joi').string().valid('video', 'text', 'document', 'quiz', 'assignment', 'discussion').required(),
+    lessonType: require('joi').string().valid('video', 'text', 'document', 'quiz').required(),
     videoUrl: require('joi').string().uri().optional().allow(''),
     videoDuration: require('joi').number().integer().positive().optional(),
-    fileAttachments: require('joi').array().items(
-      require('joi').object({
-        name: require('joi').string().required(),
-        url: require('joi').string().required(),
-        type: require('joi').string().required(),
-        size: require('joi').number().optional()
-      })
-    ).optional(),
+    fileAttachments: require('joi').array().optional(),
     estimatedTime: require('joi').number().integer().positive().optional(),
-    isRequired: require('joi').boolean().default(true),
+    isRequired: require('joi').boolean().optional(),
     prerequisites: require('joi').array().items(require('joi').number().integer().positive()).optional()
   }),
-  safeLessonHandler('createLesson', {
+  safeLessonHandler('createLesson', (req) => ({
     lesson: {
       id: Math.floor(Math.random() * 1000),
-      title: req.body?.title || 'New Mock Lesson',
-      courseId: req.body?.courseId || 1,
-      lessonType: req.body?.lessonType || 'video',
-      status: 'draft',
+      courseId: req.body.courseId,
+      title: req.body.title,
+      description: req.body.description || '',
+      content: req.body.content || '',
+      lessonType: req.body.lessonType,
+      videoUrl: req.body.videoUrl || null,
+      estimatedTime: req.body.estimatedTime || 30,
       orderIndex: 1,
-      isRequired: req.body?.isRequired !== false,
+      status: 'draft',
+      isRequired: req.body.isRequired || true,
       created_at: new Date()
     }
-  })
+  }))
 );
 
 // Update lesson
@@ -187,7 +186,7 @@ router.put('/:id',
     title: require('joi').string().min(3).max(255).optional(),
     description: require('joi').string().max(1000).optional().allow(''),
     content: require('joi').string().optional().allow(''),
-    lessonType: require('joi').string().valid('video', 'text', 'document', 'quiz', 'assignment', 'discussion').optional(),
+    lessonType: require('joi').string().valid('video', 'text', 'document', 'quiz').optional(),
     videoUrl: require('joi').string().uri().optional().allow(''),
     videoDuration: require('joi').number().integer().positive().optional(),
     fileAttachments: require('joi').array().optional(),
@@ -262,14 +261,14 @@ router.post('/:id/progress',
     notes: require('joi').string().max(1000).optional().allow(''),
     status: require('joi').string().valid('not_started', 'in_progress', 'completed').optional()
   }),
-  safeLessonHandler('updateLessonProgress', {
+  safeLessonHandler('updateLessonProgress', (req) => ({
     progress: {
-      status: req.body?.status || 'in_progress',
-      completionPercentage: req.body?.completionPercentage || 0,
-      timeSpent: req.body?.timeSpent || 0,
+      status: req.body.status || 'in_progress',
+      completionPercentage: req.body.completionPercentage || 0,
+      timeSpent: req.body.timeSpent || 0,
       lastAccessed: new Date()
     }
-  })
+  }))
 );
 
 // Mark lesson as completed
@@ -279,14 +278,14 @@ router.post('/:id/complete',
   validate({
     timeSpent: require('joi').number().integer().min(0).optional()
   }),
-  safeLessonHandler('markLessonComplete', {
+  safeLessonHandler('markLessonComplete', (req) => ({
     progress: {
       status: 'completed',
       completionPercentage: 100,
-      timeSpent: req.body?.timeSpent || 0,
+      timeSpent: req.body.timeSpent || 0,
       completedAt: new Date()
     }
-  })
+  }))
 );
 
 // Get lesson progress for student
@@ -361,7 +360,7 @@ router.post('/:id/duplicate',
         lesson: {
           id: Math.floor(Math.random() * 1000),
           title: req.body.newTitle,
-          courseId: req.body.courseId || req.params.courseId,
+          courseId: req.body.courseId || 1,
           status: 'draft',
           created_at: new Date()
         }
@@ -372,48 +371,39 @@ router.post('/:id/duplicate',
 );
 
 // ========================================
-// LESSON ANALYTICS (Teachers)
+// LESSON FILE MANAGEMENT
 // ========================================
 
-// Get lesson analytics
-router.get('/:id/analytics',
+// Upload lesson video
+router.post('/:id/video',
   validateParams(paramSchemas.id),
   isTeacherOrAdmin,
   (req, res) => {
     res.json({
       success: true,
+      message: 'Video upload endpoint ready',
       data: {
-        analytics: {
-          lessonId: parseInt(req.params.id),
-          totalViews: 45,
-          averageCompletionRate: 78.5,
-          averageTimeSpent: 1650,
-          studentProgress: [
-            {
-              studentId: 1,
-              studentName: 'John Doe',
-              status: 'completed',
-              completionPercentage: 100,
-              timeSpent: 1800,
-              completedAt: new Date()
-            },
-            {
-              studentId: 2,
-              studentName: 'Jane Smith',
-              status: 'in_progress',
-              completionPercentage: 65,
-              timeSpent: 1200,
-              lastAccessed: new Date()
-            }
-          ],
-          engagementMetrics: {
-            dropOffPoints: [30, 60, 90],
-            mostRewatchedSections: ['00:05:30', '00:12:45'],
-            averageSessionDuration: 1650
-          }
-        },
-        message: 'Mock analytics data - Lesson controller not available'
-      }
+        lessonId: parseInt(req.params.id),
+        uploadUrl: `/api/upload/lesson/${req.params.id}/video`
+      },
+      note: 'Mock response - Use upload routes for actual file upload'
+    });
+  }
+);
+
+// Upload lesson attachments
+router.post('/:id/attachments',
+  validateParams(paramSchemas.id),
+  isTeacherOrAdmin,
+  (req, res) => {
+    res.json({
+      success: true,
+      message: 'Attachments upload endpoint ready',
+      data: {
+        lessonId: parseInt(req.params.id),
+        uploadUrl: `/api/upload/lesson/${req.params.id}/attachments`
+      },
+      note: 'Mock response - Use upload routes for actual file upload'
     });
   }
 );
@@ -435,17 +425,14 @@ router.get('/docs', (req, res) => {
     viewingEndpoints: {
       'GET /course/:courseId': 'Get lessons for a course',
       'GET /:id': 'Get lesson details',
-      'GET /:id/progress': 'Get lesson progress (students)',
-      'GET /:id/analytics': 'Get lesson analytics (teachers/admin)'
+      'GET /:id/progress': 'Get lesson progress (students)'
     },
     
     managementEndpoints: {
       'POST /': 'Create new lesson',
       'PUT /:id': 'Update lesson',
       'DELETE /:id': 'Delete lesson',
-      'PATCH /:id/publish': 'Publish/unpublish lesson',
-      'PATCH /reorder': 'Reorder lessons',
-      'POST /:id/duplicate': 'Duplicate lesson'
+      'PATCH /:id/publish': 'Publish/unpublish lesson'
     },
     
     progressEndpoints: {
@@ -453,27 +440,23 @@ router.get('/docs', (req, res) => {
       'POST /:id/complete': 'Mark lesson as completed'
     },
     
+    fileEndpoints: {
+      'POST /:id/video': 'Upload lesson video',
+      'POST /:id/attachments': 'Upload lesson attachments'
+    },
+    
+    bulkEndpoints: {
+      'PATCH /reorder': 'Reorder lessons',
+      'POST /:id/duplicate': 'Duplicate lesson'
+    },
+    
     authentication: {
-      required: true,
+      required: ['All endpoints'],
       roles: {
-        student: ['View lessons', 'Update progress', 'Complete lessons'],
-        teacher: ['All management for own courses', 'View analytics'],
+        student: ['GET routes', 'Progress routes'],
+        teacher: ['All management endpoints for own courses'],
         admin: ['All endpoints']
       }
-    },
-    
-    rateLimiting: {
-      'Content creation': '50 creations per hour',
-      'General': 'Role-based limits'
-    },
-    
-    features: {
-      'Progress tracking': 'Automatic progress calculation',
-      'Prerequisites': 'Control lesson access order',
-      'File attachments': 'Support for multiple file types',
-      'Video integration': 'Video URL support with duration tracking',
-      'Rich content': 'HTML content support',
-      'Analytics': 'Detailed engagement metrics'
     }
   });
 });

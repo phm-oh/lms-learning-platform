@@ -14,10 +14,21 @@
     "test:backend": "cd backend && npm test",
     "test:frontend": "cd frontend && npm test"
   },
-  "keywords": ["lms", "education", "machine-learning", "analytics"],
+  "keywords": [
+    "lms",
+    "education",
+    "machine-learning",
+    "analytics"
+  ],
   "author": "Your Name",
   "license": "MIT",
   "devDependencies": {
     "concurrently": "^7.6.0"
+  },
+  "dependencies": {
+    "csv-writer": "^1.6.0",
+    "jimp": "^1.6.0",
+    "papaparse": "^5.5.3",
+    "pdf2pic": "^3.2.0"
   }
 }

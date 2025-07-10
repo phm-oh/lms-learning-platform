@@ -8,10 +8,10 @@ require('dotenv').config();
 // EMAIL TRANSPORTER CONFIGURATION
 // ========================================
 
-const createTransporter = () => {
+const createTransport = () => {
   if (process.env.NODE_ENV === 'production') {
     // Production email configuration
-    return nodemailer.createTransporter({
+    return nodemailer.createTransport({
       service: 'Gmail',
       auth: {
         user: process.env.EMAIL_USER,
@@ -20,7 +20,7 @@ const createTransporter = () => {
     });
   } else {
     // Development - use Ethereal Email for testing
-    return nodemailer.createTransporter({
+    return nodemailer.createTransport({
       host: 'smtp.ethereal.email',
       port: 587,
       auth: {
@@ -206,7 +206,7 @@ const emailTemplates = {
 
 class EmailService {
   constructor() {
-    this.transporter = createTransporter();
+    this.transporter = createTransport();
   }
 
   async sendEmail(to, template) {

@@ -28,19 +28,23 @@ router.use(roleBasedLimiter);
 // HELPER FUNCTION FOR SAFE ROUTING
 // ========================================
 
-const safeAnalyticsHandler = (controllerMethod, mockData = {}) => {
+// Fixed safeAnalyticsHandler
+const safeAnalyticsHandler = (controllerMethod, mockDataFunction = {}) => {
   return (req, res, next) => {
     if (analyticsController && typeof analyticsController[controllerMethod] === 'function') {
       return analyticsController[controllerMethod](req, res, next);
     } else {
+      // If mockDataFunction is a function, call it with req to get dynamic data
+      const mockData = typeof mockDataFunction === 'function' ? mockDataFunction(req) : mockDataFunction;
+      
       // Return mock data if controller not available
       return res.json({
         success: true,
         data: {
           ...mockData,
           message: 'Analytics controller not available - returning mock data',
-          userId: req.user.id,
-          userRole: req.user.role,
+          userId: req.user?.id || 'mock_user_id',
+          userRole: req.user?.role || 'mock_role',
           timestamp: new Date().toISOString()
         }
       });

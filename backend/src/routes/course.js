@@ -19,11 +19,14 @@ try {
 }
 
 // Helper function for safe routing
-const safeCourseHandler = (controllerMethod, mockData = {}) => {
+const safeCourseHandler = (controllerMethod, mockDataFunction) => {
   return (req, res, next) => {
     if (courseController && typeof courseController[controllerMethod] === 'function') {
       return courseController[controllerMethod](req, res, next);
     } else {
+      // If mockDataFunction is a function, call it with req to get dynamic data
+      const mockData = typeof mockDataFunction === 'function' ? mockDataFunction(req) : mockDataFunction;
+      
       return res.json({
         success: true,
         data: {
@@ -64,92 +67,63 @@ router.get('/',
 router.get('/:id',
   generalLimiter,
   validateParams(paramSchemas.id),
-  (req, res, next) => {
-    // Add user to request if authenticated (optional auth)
-    const token = req.headers.authorization?.split(' ')[1];
-    if (token) {
-      try {
-        const { verifyToken } = require('../middleware/auth');
-        const decoded = verifyToken(token);
-        const { User } = require('../models');
-        User.findByPk(decoded.id)
-          .then(user => {
-            if (user && user.status === 'active') {
-              req.user = user;
-            }
-            next();
-          })
-          .catch(() => next());
-      } catch (error) {
-        next();
-      }
-    } else {
-      next();
-    }
-  },
-  safeCourseHandler('getCourse', {
+  safeCourseHandler('getCourse', (req) => ({
     course: {
-      id: parseInt(req.params?.id) || 1,
+      id: parseInt(req.params.id),
       title: 'Mock Course Details',
-      description: 'Detailed mock course information',
-      teacher: { firstName: 'Mock', lastName: 'Teacher', email: 'teacher@mock.com' },
+      description: 'This is a detailed mock course for testing',
+      teacher: { firstName: 'John', lastName: 'Doe' },
       category: { name: 'Programming', color: '#007bff' },
+      isPublished: true,
+      difficultyLevel: 1,
       lessons: [
-        { id: 1, title: 'Introduction', lessonType: 'video', estimatedTime: 30 }
-      ],
-      quizzes: [
-        { id: 1, title: 'Quiz 1', quizType: 'practice', timeLimit: 30 }
-      ],
-      isPublished: true
-    },
-    stats: { totalEnrollments: 25, approvedEnrollments: 20, pendingEnrollments: 5 },
-    userEnrollment: null,
-    canManage: false
-  })
+        {
+          id: 1,
+          title: 'Introduction',
+          lessonType: 'video',
+          estimatedTime: 30
+        }
+      ]
+    }
+  }))
 );
 
 // ========================================
-// AUTHENTICATION REQUIRED ROUTES
+// PROTECTED ROUTES (Authentication required)
 // ========================================
 
 router.use(protect);
 router.use(roleBasedLimiter);
 
-// ========================================
-// COURSE MANAGEMENT (Teachers/Admin)
-// ========================================
-
 // Create new course
 router.post('/',
-  isTeacherOrAdmin,
   contentCreationLimiter,
   validate(courseSchemas.create),
-  safeCourseHandler('createCourse', {
+  safeCourseHandler('createCourse', (req) => ({
     course: {
       id: Math.floor(Math.random() * 1000),
-      title: req.body?.title || 'New Mock Course',
-      description: req.body?.description || 'Mock course description',
-      teacherId: req.user?.id,
+      title: req.body.title || 'New Mock Course',
+      description: req.body.description || 'Mock description',
       isPublished: false,
-      isActive: true,
+      teacherId: req.user.id,
       created_at: new Date()
     }
-  })
+  }))
 );
 
 // Update course
 router.put('/:id',
   validateParams(paramSchemas.id),
   validate(courseSchemas.update),
-  safeCourseHandler('updateCourse', {
+  safeCourseHandler('updateCourse', (req) => ({
     course: {
-      id: parseInt(req.params?.id) || 1,
-      title: req.body?.title || 'Updated Mock Course',
-      description: req.body?.description || 'Updated mock description',
-      isPublished: req.body?.isPublished || false,
+      id: parseInt(req.params.id),
+      title: req.body.title || 'Updated Mock Course',
+      description: req.body.description || 'Updated mock description',
+      isPublished: req.body.isPublished || false,
       updated_at: new Date()
     }
-  })
+  }))
 );
 
 // Delete course
@@ -166,13 +140,13 @@ router.patch('/:id/publish',
   validate({
     isPublished: require('joi').boolean().required()
   }),
-  safeCourseHandler('togglePublishCourse', {
+  safeCourseHandler('togglePublishCourse', (req) => ({
     course: {
-      id: parseInt(req.params?.id) || 1,
+      id: parseInt(req.params.id),
       title: 'Mock Course',
-      isPublished: req.body?.isPublished || false
+      isPublished: req.body.isPublished
     }
-  })
+  }))
 );
 
 // ========================================
@@ -191,15 +165,15 @@ router.post('/:id/enroll',
     }
     next();
   },
-  safeCourseHandler('requestEnrollment', {
+  safeCourseHandler('requestEnrollment', (req) => ({
     enrollment: {
       id: Math.floor(Math.random() * 1000),
-      courseId: parseInt(req.params?.id) || 1,
-      studentId: req.user?.id,
+      courseId: parseInt(req.params.id),
+      studentId: req.user.id,
       status: 'pending',
       enrolledAt: new Date()
     }
-  })
+  }))
 );
 
 // Get enrolled students (Teachers/Admin)
@@ -219,7 +193,9 @@ router.get('/:id/students',
           email: 'student@mock.com'
         },
         enrolledAt: new Date(),
-        completionPercentage: 65
+        progress: {
+          completionPercentage: 65
+        }
       }
     ],
     pagination: { total: 1, page: 1, limit: 20, pages: 1 }
@@ -236,7 +212,7 @@ router.put('/:id/students/:studentId',
     status: require('joi').string().valid('approved', 'rejected').required()
   }),
   isTeacherOrAdmin,
-  safeCourseHandler('updateEnrollmentStatus', {
+  safeCourseHandler('updateEnrollmentStatus', (req) => ({
     enrollment: {
       id: Math.floor(Math.random() * 1000),
       student: {
@@ -244,10 +220,10 @@ router.put('/:id/students/:studentId',
         lastName: 'Student',
         email: 'student@mock.com'
       },
-      status: req.body?.status || 'approved',
+      status: req.body.status,
       approvedAt: new Date()
     }
-  })
+  }))
 );
 
 // ========================================

@@ -18,12 +18,15 @@ try {
   quizController = null;
 }
 
-// Helper function for safe routing
-const safeQuizHandler = (controllerMethod, mockData = {}) => {
+// Helper function for safe routing - FIXED VERSION
+const safeQuizHandler = (controllerMethod, mockDataFunction = {}) => {
   return (req, res, next) => {
     if (quizController && typeof quizController[controllerMethod] === 'function') {
       return quizController[controllerMethod](req, res, next);
     } else {
+      // If mockDataFunction is a function, call it with req to get dynamic data
+      const mockData = typeof mockDataFunction === 'function' ? mockDataFunction(req) : mockDataFunction;
+      
       return res.json({
         success: true,
         data: {
@@ -84,8 +87,7 @@ router.get('/course/:courseId',
         timeRemaining: null,
         course: { title: 'Mock Course' }
       }
-    ],
-    total: 2
+    ]
   })
 );
 
@@ -93,54 +95,44 @@ router.get('/course/:courseId',
 router.get('/:id',
   validateParams(paramSchemas.id),
   isEnrolledOrTeacher,
-  (req, res) => {
-    const includeQuestions = req.user.role !== 'student' || req.query.preview === 'true';
-    
-    res.json({
-      success: true,
-      data: {
-        quiz: {
-          id: parseInt(req.params.id),
-          title: 'Mock Quiz Details',
-          description: 'This is a mock quiz for testing purposes',
-          quizType: 'practice',
-          timeLimit: 30,
-          maxAttempts: 3,
-          passingScore: 70,
-          randomizeQuestions: false,
-          showCorrectAnswers: true,
-          showResultsImmediately: true,
-          isPublished: true,
-          availableFrom: new Date(),
-          availableUntil: null,
-          questions: includeQuestions ? [
-            {
-              id: 1,
-              questionText: 'What is the capital of France?',
-              questionType: 'multiple_choice',
-              options: ['London', 'Berlin', 'Paris', 'Madrid'],
-              points: 10,
-              orderIndex: 1,
-              ...(req.user.role !== 'student' && { correctAnswer: 'Paris' })
-            },
-            {
-              id: 2,
-              questionText: 'The Earth is flat.',
-              questionType: 'true_false',
-              options: ['True', 'False'],
-              points: 5,
-              orderIndex: 2,
-              ...(req.user.role !== 'student' && { correctAnswer: 'False' })
-            }
-          ] : undefined,
-          course: { title: 'Mock Course', teacherId: 1 }
+  safeQuizHandler('getQuiz', (req) => ({
+    quiz: {
+      id: parseInt(req.params.id),
+      title: 'Mock Quiz Details',
+      description: 'This is a detailed mock quiz for testing',
+      quizType: 'practice',
+      timeLimit: 30,
+      maxAttempts: 3,
+      passingScore: 70,
+      randomizeQuestions: false,
+      showCorrectAnswers: true,
+      showResultsImmediately: true,
+      isPublished: true,
+      questions: req.user.role !== 'student' ? [
+        {
+          id: 1,
+          questionText: 'What is 2 + 2?',
+          questionType: 'multiple_choice',
+          options: ['3', '4', '5', '6'],
+          points: 10,
+          orderIndex: 1,
+          ...(req.user.role !== 'student' && { correctAnswer: '4' })
         },
-        userAttempts: req.user.role === 'student' ? [] : undefined,
-        canManage: req.user.role === 'teacher' || req.user.role === 'admin',
-        message: 'Mock quiz data - Quiz controller not available'
-      }
-    });
-  }
+        {
+          id: 2,
+          questionText: 'JavaScript is a programming language',
+          questionType: 'true_false',
+          options: ['True', 'False'],
+          points: 5,
+          orderIndex: 2,
+          ...(req.user.role !== 'student' && { correctAnswer: 'True' })
+        }
+      ] : undefined,
+      course: { title: 'Mock Course', teacherId: 1 },
+      userAttempts: req.user.role === 'student' ? [] : undefined,
+      canManage: req.user.role === 'teacher' || req.user.role === 'admin'
+    }
+  }))
 );
 
 // ========================================
@@ -176,20 +168,28 @@ router.post('/',
       })
     ).optional()
   }),
-  safeQuizHandler('createQuiz', {
+  safeQuizHandler('createQuiz', (req) => ({
     quiz: {
       id: Math.floor(Math.random() * 1000),
-      title: req.body?.title || 'New Mock Quiz',
-      courseId: req.body?.courseId || 1,
-      quizType: req.body?.quizType || 'practice',
-      timeLimit: req.body?.timeLimit || 30,
-      maxAttempts: req.body?.maxAttempts || 1,
-      passingScore: req.body?.passingScore || 70,
+      title: req.body.title,
+      courseId: req.body.courseId,
+      lessonId: req.body.lessonId || null,
+      description: req.body.description || '',
+      quizType: req.body.quizType || 'practice',
+      timeLimit: req.body.timeLimit || 30,
+      maxAttempts: req.body.maxAttempts || 1,
+      passingScore: req.body.passingScore || 70,
+      randomizeQuestions: req.body.randomizeQuestions || false,
+      showCorrectAnswers: req.body.showCorrectAnswers || true,
+      showResultsImmediately: req.body.showResultsImmediately || true,
+      availableFrom: req.body.availableFrom || null,
+      availableUntil: req.body.availableUntil || null,
       isPublished: false,
-      questions: req.body?.questions || [],
+      questions: req.body.questions || [],
+      teacherId: req.user.id,
       created_at: new Date()
     }
-  })
+  }))
 );
 
 // Update quiz
@@ -209,33 +209,22 @@ router.put('/:id',
     availableUntil: require('joi').date().optional(),
     isPublished: require('joi').boolean().optional()
   }),
-  (req, res) => {
-    res.json({
-      success: true,
-      message: 'Quiz updated successfully',
-      data: {
-        quiz: {
-          id: parseInt(req.params.id),
-          ...req.body,
-          updated_at: new Date()
-        }
-      },
-      note: 'Mock response - Quiz controller not available'
-    });
-  }
+  safeQuizHandler('updateQuiz', (req) => ({
+    quiz: {
+      id: parseInt(req.params.id),
+      ...req.body,
+      updated_at: new Date()
+    }
+  }))
 );
 
 // Delete quiz
 router.delete('/:id',
   validateParams(paramSchemas.id),
   isTeacherOrAdmin,
-  (req, res) => {
-    res.json({
-      success: true,
-      message: 'Quiz deleted successfully',
-      note: 'Mock response - Quiz controller not available'
-    });
-  }
+  safeQuizHandler('deleteQuiz', {
+    message: 'Quiz deleted successfully'
+  })
 );
 
 // Publish/unpublish quiz
@@ -245,21 +234,13 @@ router.patch('/:id/publish',
   validate({
     isPublished: require('joi').boolean().required()
   }),
-  (req, res) => {
-    const { isPublished } = req.body;
-    
-    res.json({
-      success: true,
-      message: `Quiz ${isPublished ? 'published' : 'unpublished'} successfully`,
-      data: {
-        quiz: {
-          id: parseInt(req.params.id),
-          isPublished
-        }
-      },
-      note: 'Mock response - Quiz controller not available'
-    });
-  }
+  safeQuizHandler('togglePublishQuiz', (req) => ({
+    quiz: {
+      id: parseInt(req.params.id),
+      isPublished: req.body.isPublished,
+      publishedAt: req.body.isPublished ? new Date() : null
+    }
+  }))
 );
 
 // ========================================
@@ -271,14 +252,17 @@ router.post('/:id/attempt',
   validateParams(paramSchemas.id),
   isStudent,
   quizAttemptLimiter,
-  safeQuizHandler('startQuizAttempt', {
+  safeQuizHandler('startQuizAttempt', (req) => ({
     attempt: {
       id: Math.floor(Math.random() * 1000),
+      quizId: parseInt(req.params.id),
+      studentId: req.user.id,
       attemptNumber: 1,
-      startedAt: new Date()
+      startedAt: new Date(),
+      expiresAt: new Date(Date.now() + 30 * 60 * 1000) // 30 minutes
     },
     quiz: {
-      id: parseInt(req.params?.id) || 1,
+      id: parseInt(req.params.id),
       title: 'Mock Quiz Attempt',
       description: 'This is a mock quiz attempt',
       timeLimit: 30,
@@ -287,14 +271,30 @@ router.post('/:id/attempt',
           id: 1,
           questionText: 'What is 2 + 2?',
           questionType: 'multiple_choice',
-          options: ['3', '4', '5', '6'],
+          options: [
+            { id: 1, text: '3' },
+            { id: 2, text: '4' },
+            { id: 3, text: '5' },
+            { id: 4, text: '6' }
+          ],
           points: 10,
           orderIndex: 1
+        },
+        {
+          id: 2,
+          questionText: 'JavaScript is a programming language',
+          questionType: 'true_false',
+          options: [
+            { id: 1, text: 'True' },
+            { id: 2, text: 'False' }
+          ],
+          points: 5,
+          orderIndex: 2
         }
       ]
     },
-    timeRemaining: 1800
-  })
+    timeRemaining: 1800 // 30 minutes in seconds
+  }))
 );
 
 // Submit answer for a question
@@ -302,34 +302,82 @@ router.post('/:id/answer',
   validateParams(paramSchemas.id),
   isStudent,
   validate({
+    attemptId: require('joi').number().integer().positive().required(),
     questionId: require('joi').number().integer().positive().required(),
-    answer: require('joi').alternatives().try(
-      require('joi').string(),
-      require('joi').array().items(require('joi').string())
-    ).required(),
+    answerText: require('joi').string().optional().allow(''),
+    selectedOptions: require('joi').array().items(require('joi').number().integer()).optional(),
     timeSpent: require('joi').number().min(0).optional()
   }),
-  safeQuizHandler('submitQuizAnswer', {
-    questionId: req.body?.questionId || 1,
+  safeQuizHandler('submitQuizAnswer', (req) => ({
+    questionId: req.body.questionId,
+    attemptId: req.body.attemptId,
     saved: true,
-    totalAnswered: 1
-  })
+    timeRemaining: 1500,
+    progress: {
+      answeredQuestions: 1,
+      totalQuestions: 2,
+      percentage: 50.0
+    }
+  }))
 );
 
 // Submit complete quiz
 router.post('/:id/submit',
   validateParams(paramSchemas.id),
   isStudent,
-  safeQuizHandler('submitQuiz', {
+  validate({
+    attemptId: require('joi').number().integer().positive().required(),
+    finalAnswers: require('joi').array().items(
+      require('joi').object({
+        questionId: require('joi').number().integer().positive().required(),
+        answerText: require('joi').string().optional().allow(''),
+        selectedOptions: require('joi').array().items(require('joi').number().integer()).optional(),
+        timeSpent: require('joi').number().min(0).optional()
+      })
+    ).optional()
+  }),
+  safeQuizHandler('submitQuiz', (req) => ({
     attempt: {
-      id: Math.floor(Math.random() * 1000),
-      score: 85,
-      maxScore: 100,
-      percentage: 85,
+      id: req.body.attemptId,
+      quizId: parseInt(req.params.id),
+      studentId: req.user.id,
+      score: 85.0,
+      maxScore: 100.0,
+      percentage: 85.0,
+      passed: true,
+      passingScore: 70.0,
+      timeSpent: 1245, // seconds
+      submittedAt: new Date(),
       isCompleted: true,
-      submittedAt: new Date()
+      autoSubmitted: false
+    },
+    results: {
+      correctAnswers: 8,
+      incorrectAnswers: 2,
+      totalQuestions: 10,
+      breakdown: [
+        {
+          questionId: 1,
+          correct: true,
+          pointsEarned: 10,
+          maxPoints: 10,
+          explanation: 'ถูกต้อง! 2 + 2 = 4'
+        },
+        {
+          questionId: 2,
+          correct: true,
+          pointsEarned: 5,
+          maxPoints: 5,
+          explanation: 'ถูกต้อง! JavaScript เป็น programming language'
+        }
+      ]
+    },
+    nextAttempt: {
+      available: true,
+      attemptNumber: 2,
+      remainingAttempts: 2
     }
-  })
+  }))
 );
 
 // Get quiz results
@@ -388,44 +436,38 @@ router.get('/:id/results',
 router.get('/:id/analytics',
   validateParams(paramSchemas.id),
   isTeacherOrAdmin,
-  (req, res) => {
-    res.json({
-      success: true,
-      data: {
-        analytics: {
-          quizId: parseInt(req.params.id),
-          totalAttempts: 25,
-          completedAttempts: 23,
-          averageScore: 78.5,
-          passingRate: 82,
-          averageTimeSpent: 1350,
-          difficultyAnalysis: {
-            easy: 2,
-            medium: 3,
-            hard: 1
-          },
-          questionAnalysis: [
-            {
-              questionId: 1,
-              correctAnswers: 20,
-              totalAnswers: 23,
-              successRate: 87,
-              averageTime: 45
-            }
-          ],
-          studentPerformance: [
-            {
-              studentId: 1,
-              bestScore: 95,
-              attempts: 2,
-              lastAttempt: new Date()
-            }
-          ]
-        },
-        message: 'Mock analytics data - Quiz controller not available'
-      }
-    });
-  }
+  safeQuizHandler('getQuizAnalytics', (req) => ({
+    analytics: {
+      quizId: parseInt(req.params.id),
+      totalAttempts: 25,
+      completedAttempts: 23,
+      averageScore: 78.5,
+      passingRate: 82,
+      averageTimeSpent: 1350,
+      difficultyAnalysis: {
+        easy: 2,
+        medium: 3,
+        hard: 1
+      },
+      questionAnalysis: [
+        {
+          questionId: 1,
+          correctAnswers: 20,
+          totalAnswers: 23,
+          successRate: 87,
+          averageTime: 45
+        }
+      ],
+      studentPerformance: [
+        {
+          studentId: 1,
+          bestScore: 95,
+          attempts: 2,
+          lastAttempt: new Date()
+        }
+      ]
+    }
+  }))
 );
 
 // ========================================
@@ -436,18 +478,12 @@ router.get('/:id/analytics',
 router.post('/:id/import-questions',
   validateParams(paramSchemas.id),
   isTeacherOrAdmin,
-  (req, res) => {
-    res.json({
-      success: true,
-      message: 'Questions imported successfully',
-      data: {
-        imported: 5,
-        failed: 0,
-        total: 5
-      },
-      note: 'Mock response - Quiz controller not available'
-    });
-  }
+  safeQuizHandler('importQuizQuestions', (req) => ({
+    imported: 5,
+    failed: 0,
+    total: 5,
+    quizId: parseInt(req.params.id)
+  }))
 );
 
 // Duplicate quiz
@@ -458,22 +494,16 @@ router.post('/:id/duplicate',
     newTitle: require('joi').string().min(3).max(255).required(),
     courseId: require('joi').number().integer().positive().optional()
   }),
-  (req, res) => {
-    res.json({
-      success: true,
-      message: 'Quiz duplicated successfully',
-      data: {
-        quiz: {
-          id: Math.floor(Math.random() * 1000),
-          title: req.body.newTitle,
-          courseId: req.body.courseId || req.params.courseId,
-          isPublished: false,
-          created_at: new Date()
-        }
-      },
-      note: 'Mock response - Quiz controller not available'
-    });
-  }
+  safeQuizHandler('duplicateQuiz', (req) => ({
+    quiz: {
+      id: Math.floor(Math.random() * 1000),
+      title: req.body.newTitle,
+      courseId: req.body.courseId || parseInt(req.params.courseId),
+      originalQuizId: parseInt(req.params.id),
+      isPublished: false,
+      created_at: new Date()
+    }
+  }))
 );
 
 // ========================================
@@ -484,21 +514,18 @@ router.post('/:id/duplicate',
 router.get('/:id/status',
   validateParams(paramSchemas.id),
   isStudent,
-  (req, res) => {
-    res.json({
-      success: true,
-      data: {
-        quizId: parseInt(req.params.id),
-        isActive: true,
-        timeRemaining: 1500,
-        currentQuestion: 1,
-        totalQuestions: 5,
-        canSubmit: true,
-        lastSaved: new Date()
-      },
-      message: 'Mock quiz status - Real-time features not available'
-    });
-  }
+  safeQuizHandler('getQuizStatus', (req) => ({
+    quizId: parseInt(req.params.id),
+    studentId: req.user.id,
+    isActive: true,
+    timeRemaining: 1500,
+    currentQuestion: 1,
+    totalQuestions: 5,
+    answeredQuestions: 0,
+    canSubmit: true,
+    lastSaved: new Date(),
+    autoSaveEnabled: true
+  }))
 );
 
 // ========================================
