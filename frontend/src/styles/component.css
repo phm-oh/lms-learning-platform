@@ -1,0 +1,57 @@
+/* File: frontend/src/styles/component.css */
+
+:root {
+  /* Brand Colors */
+  --color-primary: #f43f5e;
+  --color-primary-dark: #e11d48;
+  --color-primary-darker: #be123c;
+  --color-primary-text: #ffffff;
+
+  --color-secondary: #1d4ed8;
+  --color-secondary-light: #3b82f6;
+
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+
+  --color-surface: #ffffff;
+  --color-background: #0f172a;
+  --color-card: #1e293b;
+  --color-border: #334155;
+
+  --color-text: #e2e8f0;
+  --color-muted: #94a3b8;
+
+  /* Gradients */
+  --gradient-primary: linear-gradient(135deg, #f43f5e, #e11d48, #be123c);
+  --gradient-secondary: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  --gradient-success: linear-gradient(135deg, #10b981, #059669);
+  --gradient-warning: linear-gradient(135deg, #f59e0b, #d97706);
+  --gradient-danger: linear-gradient(135deg, #ef4444, #dc2626);
+  --gradient-card: linear-gradient(145deg, #ffffff, #f3f4f6);
+
+  /* Shadows */
+  --shadow-soft: 0 2px 15px rgba(0, 0, 0, 0.1);
+  --shadow-hover: 0 8px 30px rgba(244, 63, 94, 0.2);
+  --shadow-card: 0 4px 20px rgba(244, 63, 94, 0.08);
+
+  /* Border Radius */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.5rem;
+  --radius-full: 9999px;
+
+  /* Typography */
+  --font-base: 'Inter', sans-serif;
+  --font-thai: 'Sarabun', sans-serif;
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-base: 1rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.25rem;
+  --font-size-2xl: 1.5rem;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+}

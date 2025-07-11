@@ -10,42 +10,41 @@
 
 /* ===== CSS Variables (ตาม LearnSync Design) ===== */
 :root {
-  /* Primary Brand Colors */
-  --color-primary-50: #f3f1ff;
-  --color-primary-100: #ebe5ff;
-  --color-primary-500: #8b5cf6;
-  --color-primary-600: #7c3aed;
-  --color-primary-700: #6d28d9;
-  --color-primary-800: #5b21b6;
-  --color-primary-900: #4c1d95;
+  --color-primary-50: #fff1f2;
+  --color-primary-100: #ffe4e6;
+  --color-primary-500: #f43f5e;
+  --color-primary-600: #e11d48;
+  --color-primary-700: #be123c;
+  --color-primary-800: #9f1239;
+  --color-primary-900: #881337;
   
   /* Background Colors */
-  --bg-primary: #1e1b4b;
-  --bg-secondary: #312e81;
+  --bg-primary: #192950;
+  --bg-secondary: #203b64;
   --bg-card: #ffffff;
-  --bg-sidebar: #1e1b4b;
-  --bg-overlay: rgba(30, 27, 75, 0.8);
+  --bg-sidebar: #141c2f;
+  --bg-overlay: rgba(15, 23, 42, 0.8);
   
   /* Gradient Definitions */
-  --gradient-primary: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 50%, #6d28d9 100%);
-  --gradient-hero: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #8b5cf6 100%);
-  --gradient-sidebar: linear-gradient(180deg, #1e1b4b 0%, #312e81 100%);
-  --gradient-card: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
+  --gradient-primary: linear-gradient(135deg, #f43f5e 0%, #e11d48 50%, #be123c 100%);
+  --gradient-hero: linear-gradient(135deg, #1d4ed8 0%, #3b82f6 50%, #60a5fa 100%);
+  --gradient-sidebar: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+  --gradient-card: linear-gradient(145deg, #ffffff 0%, #f3f4f6 100%);
   
   /* Course Card Gradients */
-  --gradient-yellow: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+  --gradient-yellow: linear-gradient(135deg, #facc15 0%, #eab308 100%);
   --gradient-blue: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
-  --gradient-pink: linear-gradient(135deg, #ec4899 0%, #db2777 100%);
-  --gradient-teal: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%);
-  --gradient-orange: linear-gradient(135deg, #fb923c 0%, #ea580c 100%);
-  --gradient-green: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  --gradient-pink: linear-gradient(135deg, #f472b6 0%, #ec4899 100%);
+  --gradient-teal: linear-gradient(135deg, #2dd4bf 0%, #14b8a6 100%);
+  --gradient-orange: linear-gradient(135deg, #fb923c 0%, #f97316 100%);
+  --gradient-green: linear-gradient(135deg, #34d399 0%, #10b981 100%);
   
   /* Shadow Definitions */
-  --shadow-soft: 0 2px 15px 0 rgba(0, 0, 0, 0.08);
-  --shadow-card: 0 4px 20px 0 rgba(139, 92, 246, 0.1);
-  --shadow-card-hover: 0 8px 30px 0 rgba(139, 92, 246, 0.2);
-  --shadow-purple: 0 4px 20px 0 rgba(139, 92, 246, 0.3);
-  --shadow-glow: 0 0 20px rgba(139, 92, 246, 0.5);
+  --shadow-soft: 0 2px 15px 0 rgba(0, 0, 0, 0.1);
+  --shadow-card: 0 4px 20px 0 rgba(244, 63, 94, 0.08);
+  --shadow-card-hover: 0 8px 30px 0 rgba(244, 63, 94, 0.2);
+  --shadow-purple: 0 4px 20px 0 rgba(244, 63, 94, 0.3);
+  --shadow-glow: 0 0 20px rgba(244, 63, 94, 0.4);
   
   /* Typography */
   --font-primary: 'Inter', system-ui, sans-serif;

@@ -34,7 +34,11 @@ export {
   SearchInput,
   PasswordInput,
   Textarea,
-  FileInput 
+  FileInput,
+  InputGroup,
+  InputLabel,
+  InputError,
+  InputIcon 
 } from './Input';
 
 // Layout Components
@@ -143,7 +147,7 @@ export const validateComponentProps = (componentName, props) => {
       }
     }
   }
-  
+
   return true;
 };
 

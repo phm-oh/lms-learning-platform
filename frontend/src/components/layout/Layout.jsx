@@ -68,7 +68,7 @@ const Layout = ({
 
   return (
     <div className={`min-h-screen ${isDarkMode ? 'dark' : ''}`}>
-      <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-800 to-purple-900">
+      <div className="min-h-screen bg-[var(--bg-primary)]">
         
         {/* Header */}
         <Header 
@@ -152,7 +152,7 @@ const Header = ({
                 <BookOpen className="w-6 h-6 text-white" />
               </div>
               <div className="hidden sm:block">
-                <h1 className="text-xl font-bold text-white">LearnSync</h1>
+                <h1 className="text-xl font-bold text-white"><Kru-oh className="dev"></Kru-oh></h1>
                 <p className="text-xs text-purple-200">Learning Management System</p>
               </div>
             </div>
@@ -352,7 +352,7 @@ const Sidebar = ({
             {!isCollapsed ? (
               <div className="text-center">
                 <p className="text-xs text-gray-400">LMS v1.0.0</p>
-                <p className="text-xs text-gray-500">© 2025 LearnSync</p>
+                <p className="text-xs text-gray-500">© 2025 Kru Phanumet</p>
               </div>
             ) : (
               <div className="flex justify-center">
@@ -376,7 +376,7 @@ const SidebarItem = ({ icon: Icon, label, path, active, isCollapsed, onClick }) 
         className={`
           flex items-center px-3 py-2.5 rounded-lg transition-all duration-200
           ${active 
-            ? 'bg-purple-600 text-white shadow-lg' 
+            ? 'bg-blue-900 text-white shadow-lg' 
             : 'text-gray-300 hover:bg-gray-700 hover:text-white'
           }
           ${isCollapsed ? 'justify-center' : 'space-x-3'}

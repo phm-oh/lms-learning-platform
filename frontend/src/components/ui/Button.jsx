@@ -37,19 +37,19 @@ const Button = ({
   // Variant styles - สีสันตามธีม LearnSync
   const variantStyles = {
     primary: `
-      bg-gradient-to-r from-purple-500 via-purple-600 to-purple-700
+      bg-gradient-to-r from-red-500 via-red-550 to-red-500
       text-white border-0
-      hover:from-purple-600 hover:via-purple-700 hover:to-purple-800
-      hover:shadow-lg hover:shadow-purple-500/25
-      focus:ring-purple-500
+      hover:from-red-600 hover:via-red-700 hover:to-red-800
+      hover:shadow-lg hover:shadow-red-500/25
+      focus:ring-red-500
       hover:-translate-y-0.5
     `,
     secondary: `
-      bg-white text-purple-600 
-      border-2 border-purple-600
-      hover:bg-purple-600 hover:text-white
-      hover:shadow-lg hover:shadow-purple-500/20
-      focus:ring-purple-500
+      bg-white text-blue-900 
+      border-2 border-blue-900
+      hover:bg-blue-600 hover:text-white
+      hover:shadow-lg hover:shadow-blue-500/20
+      focus:ring-blue-500
       hover:-translate-y-0.5
     `,
     success: `
@@ -79,9 +79,9 @@ const Button = ({
     outline: `
       bg-transparent text-gray-700 
       border-2 border-gray-300
-      hover:border-purple-500 hover:text-purple-600
+      hover:border-blue-500 hover:text-blue-600
       hover:shadow-md
-      focus:ring-purple-500
+      focus:ring-blue-500
     `,
     ghost: `
       bg-transparent text-gray-600
@@ -90,11 +90,11 @@ const Button = ({
       focus:ring-gray-500
     `,
     gradient: `
-      bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500
+      bg-gradient-to-r from-pink-500 via-blue-500 to-indigo-500
       text-white border-0
-      hover:from-pink-600 hover:via-purple-600 hover:to-indigo-600
-      hover:shadow-xl hover:shadow-purple-500/30
-      focus:ring-purple-500
+      hover:from-pink-600 hover:via-blue-600 hover:to-indigo-600
+      hover:shadow-xl hover:shadow-blue-500/30
+      focus:ring-blue-500
       hover:-translate-y-1
       animate-gradient-x
     `

@@ -40,9 +40,9 @@ const Card = ({
       bg-white/80 backdrop-blur-md
       border-white/20
     `,
-    purple: `
-      bg-gradient-to-br from-purple-50 to-purple-100
-      border-purple-200
+    red: `
+      bg-gradient-to-br from-red-50 to-red-100
+      border-red-200
     `,
     blue: `
       bg-gradient-to-br from-blue-50 to-blue-100
@@ -65,8 +65,8 @@ const Card = ({
       text-white
     `,
     gradient: `
-      bg-gradient-to-br from-purple-500 via-purple-600 to-indigo-600
-      border-0 text-white
+      bg-gradient-to-br from-green-800 via-green-900 to-blue-900
+      border-0 text-dark-900
     `
   };
 
@@ -87,9 +87,9 @@ const Card = ({
     md: 'shadow-md',
     lg: 'shadow-lg',
     xl: 'shadow-xl',
-    purple: 'shadow-lg shadow-purple-500/10',
+    red: 'shadow-lg shadow-red-500/10',
     blue: 'shadow-lg shadow-blue-500/10',
-    colored: variant === 'gradient' ? 'shadow-xl shadow-purple-500/25' : 'shadow-md'
+    colored: variant === 'gradient' ? 'shadow-xl shadow-red-500/25' : 'shadow-md'
   };
 
   // Rounded styles
@@ -107,7 +107,7 @@ const Card = ({
   // Hover effects
   const hoverStyles = hover || interactive || onClick ? `
     hover:shadow-xl hover:-translate-y-1
-    hover:shadow-purple-500/20
+    hover:shadow-red-500/20
   ` : '';
 
   // รวม styles ทั้งหมด
@@ -129,7 +129,7 @@ const Card = ({
     >
       {/* Gradient overlay สำหรับ interactive cards */}
       {(interactive || onClick) && (
-        <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-purple-500/0 to-purple-500/0 hover:from-purple-500/5 hover:to-indigo-500/5 transition-all duration-300" />
+        <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-red-500/0 to-red-500/0 hover:from-red-500/5 hover:to-indigo-500/5 transition-all duration-300" />
       )}
       
       {/* Content */}
@@ -198,7 +198,7 @@ export const CourseCard = ({
   students,
   duration,
   category,
-  gradient = 'from-purple-500 to-indigo-600',
+  gradient = 'from-red-500 to-indigo-600',
   className = '',
   onClick,
   ...props 
@@ -239,7 +239,7 @@ export const CourseCard = ({
       
       {/* Content Section */}
       <div className="p-6">
-        <h3 className="font-semibold text-gray-900 mb-2 group-hover:text-purple-600 transition-colors line-clamp-2">
+        <h3 className="font-semibold text-gray-900 mb-2 group-hover:text-red-600 transition-colors line-clamp-2">
           {title}
         </h3>
         
@@ -294,12 +294,12 @@ export const StatsCard = ({
   value, 
   icon: Icon, 
   trend,
-  color = 'purple',
+  color = 'red',
   className = '',
   ...props 
 }) => {
   const colorClasses = {
-    purple: 'from-purple-500 to-purple-600',
+    red: 'from-red-500 to-red-600',
     blue: 'from-blue-500 to-blue-600',
     green: 'from-emerald-500 to-emerald-600',
     yellow: 'from-amber-500 to-amber-600',

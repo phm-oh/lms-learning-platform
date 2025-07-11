@@ -5,10 +5,8 @@ import { ComponentShowcase } from "./components";
 
 function App() {
   return (
-    <div className="group card-course">
-      <div className="group-hover:text-purple-600">
-        ไอ้นี่จะเปลี่ยนสีเมื่อแม่ hover
-      </div>
+    <div >
+      
       <Layout userRole="student">
         <h1> Phanumet</h1>
         <ComponentShowcase />
