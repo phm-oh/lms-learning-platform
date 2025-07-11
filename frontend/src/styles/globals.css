@@ -170,7 +170,7 @@ body {
 }
 
 .card-course {
-  @apply card-base p-6 group cursor-pointer overflow-hidden relative;
+  @apply card-base p-6  cursor-pointer overflow-hidden relative;
 }
 
 .card-course::before {
