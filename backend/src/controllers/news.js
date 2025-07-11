@@ -2,8 +2,8 @@
 // Path: backend/src/controllers/news.js
 
 const { Op } = require('sequelize');
-const { AppError } = require('../middleware/errorHandler');
-const catchAsync = require('../utils/catchAsync');
+const { AppError , catchAsync} = require('../middleware/errorHandler');
+
 
 // Import models (using kebab-case filenames)
 const News = require('../models/news/news-model');

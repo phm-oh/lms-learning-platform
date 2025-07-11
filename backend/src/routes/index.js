@@ -12,6 +12,7 @@ const lessonRoutes = require('./lesson');
 const quizRoutes = require('./quiz');
 const analyticsRoutes = require('./analytics');
 const uploadRoutes = require('./upload'); // 🆕 NEW: Upload routes
+const newsRoutes = require('./news'); // 🆕 เพิ่มบรรทัดนี้!
 
 // ========================================
 // API STATUS & HEALTH CHECK
@@ -163,6 +164,7 @@ router.use('/analytics', analyticsRoutes);
 
 // 🆕 Upload routes
 router.use('/upload', uploadRoutes);
+router.use('/news', newsRoutes); // 🆕 เพิ่มบรรทัดนี้!
 
 // ========================================
 // 🆕 ADDITIONAL UPLOAD-RELATED ROUTES
@@ -402,7 +404,8 @@ router.use('*', (req, res) => {
       quizzes: 'GET /api/quizzes/*',
       upload: 'GET /api/upload/*',      // 🆕 NEW
       admin: 'GET /api/admin/*',
-      analytics: 'GET /api/analytics/*'
+      analytics: 'GET /api/analytics/*' ,
+      news: 'GET /api/news/*'
     },
     suggestion: 'Check /api/docs for complete API documentation'
   });
