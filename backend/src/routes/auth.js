@@ -5,7 +5,20 @@ const express = require('express');
 const router = express.Router();
 
 // Import controllers and middleware
-const authController = require('../controllers/auth');
+const {
+  register,
+  login,
+  logout,
+  refreshToken,
+  getMe,
+  updateProfile,
+  changePassword,
+  forgotPassword,
+  resetPassword,
+  verifyEmail
+} = require('../controllers/auth');
+
+// Import middleware
 const { protect, optionalAuth } = require('../middleware/auth');
 const { validate, userSchemas } = require('../middleware/validation');
 const { 
@@ -21,33 +34,31 @@ const {
 // User registration
 router.post('/register', 
   authLimiter,
-  validate(userSchemas.register),
-  authController.register
+  register
 );
 
 // User login
 router.post('/login',
   authLimiter,
-  validate(userSchemas.login),
-  authController.login
+  login
 );
 
 // Forgot password - send reset token
 router.post('/forgot-password',
   passwordResetLimiter,
-  authController.forgotPassword
+  forgotPassword
 );
 
 // Reset password with token
 router.patch('/reset-password/:token',
   passwordResetLimiter,
-  authController.resetPassword
+  resetPassword
 );
 
 // Email verification
 router.get('/verify-email/:token',
   generalLimiter,
-  authController.verifyEmail
+  verifyEmail
 );
 
 // ========================================
@@ -57,40 +68,31 @@ router.get('/verify-email/:token',
 // Logout (clear token)
 router.post('/logout',
   generalLimiter,
-  authController.logout
+  logout
 );
 
-// Get current user profile - FIXED: ใช้ getMe แทน getProfile
+// Get current user profile
 router.get('/profile',
   protect,
-  authController.getMe
+  getMe
 );
 
 // Update user profile
 router.patch('/profile',
   protect,
-  validate(userSchemas.updateProfile),
-  authController.updateProfile
+  updateProfile
 );
 
 // Change password
 router.patch('/change-password',
   protect,
-  validate(userSchemas.changePassword),
-  authController.changePassword
+  changePassword
 );
 
 // Refresh token
 router.post('/refresh-token',
   protect,
-  authController.refreshToken
-);
-
-// Resend email verification
-router.post('/resend-verification',
-  protect,
-  generalLimiter,
-  authController.verifyEmail
+  refreshToken
 );
 
 // ========================================
@@ -149,6 +151,7 @@ router.get('/docs', (req, res) => {
         body: {
           email: 'string (required)',
           password: 'string (required, min 6 chars)',
+          confirmPassword: 'string (required, must match password)',
           firstName: 'string (required)',
           lastName: 'string (required)',
           role: 'string (optional: teacher|student, default: student)',
@@ -195,7 +198,8 @@ router.get('/docs', (req, res) => {
           token: 'string (required)'
         },
         body: {
-          password: 'string (required, min 6 chars)'
+          password: 'string (required, min 6 chars)',
+          confirmPassword: 'string (required, must match password)'
         },
         responses: {
           200: 'Password reset successful',
@@ -226,8 +230,7 @@ router.get('/docs', (req, res) => {
           lastName: 'string (optional)',
           phone: 'string (optional)',
           dateOfBirth: 'date (optional)',
-          bio: 'string (optional)',
-          address: 'string (optional)'
+          bio: 'string (optional)'
         },
         responses: {
           200: 'Profile updated',
@@ -242,7 +245,8 @@ router.get('/docs', (req, res) => {
         },
         body: {
           currentPassword: 'string (required)',
-          newPassword: 'string (required, min 6 chars)'
+          newPassword: 'string (required, min 6 chars)',
+          confirmPassword: 'string (required, must match newPassword)'
         },
         responses: {
           200: 'Password changed',

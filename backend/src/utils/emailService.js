@@ -8,26 +8,32 @@ require('dotenv').config();
 // EMAIL TRANSPORTER CONFIGURATION
 // ========================================
 
-const createTransport = () => {
-  if (process.env.NODE_ENV === 'production') {
-    // Production email configuration
-    return nodemailer.createTransport({
-      service: 'Gmail',
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS // App password
-      }
-    });
-  } else {
-    // Development - use Ethereal Email for testing
-    return nodemailer.createTransport({
-      host: 'smtp.ethereal.email',
-      port: 587,
-      auth: {
-        user: 'ethereal.user@ethereal.email',
-        pass: 'verysecret'
-      }
-    });
+const createTransporter = () => {
+  try {
+    if (process.env.NODE_ENV === 'production') {
+      // Production email configuration
+      return nodemailer.createTransport({
+        service: process.env.EMAIL_SERVICE || 'gmail',
+        auth: {
+          user: process.env.EMAIL_USER,
+          pass: process.env.EMAIL_PASS
+        }
+      });
+    } else {
+      // Development - use Gmail for testing
+      return nodemailer.createTransport({
+        host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+        port: process.env.EMAIL_PORT || 587,
+        secure: false,
+        auth: {
+          user: process.env.EMAIL_USER,
+          pass: process.env.EMAIL_PASS
+        }
+      });
+    }
+  } catch (error) {
+    console.error('❌ Email transporter creation failed:', error.message);
+    return null;
   }
 };
 
@@ -41,18 +47,31 @@ const emailTemplates = {
     subject: '🎉 ยินดีต้อนรับสู่ LMS Platform!',
     html: `
       <div style="max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif;">
-        <h2 style="color: #4CAF50;">ยินดีต้อนรับ ${user.firstName} ${user.lastName}!</h2>
-        <p>บัญชีนักเรียนของคุณได้รับการอนุมัติเรียบร้อยแล้ว</p>
-        <div style="background: #f5f5f5; padding: 20px; border-radius: 8px;">
-          <h3>ข้อมูลบัญชี:</h3>
-          <p><strong>อีเมล:</strong> ${user.email}</p>
-          <p><strong>สถานะ:</strong> Active</p>
+        <div style="background: #4CAF50; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+          <h1 style="margin: 0;">ยินดีต้อนรับ! 🎉</h1>
         </div>
-        <p>🚀 เริ่มต้นการเรียนรู้ได้เลย!</p>
-        <a href="${process.env.FRONTEND_URL}/login" 
-           style="background: #4CAF50; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px;">
-          เข้าสู่ระบบ
-        </a>
+        <div style="padding: 20px; background: white; border-radius: 0 0 8px 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+          <h2 style="color: #333;">สวัสดี ${user.firstName} ${user.lastName}!</h2>
+          <p style="color: #666; line-height: 1.6;">บัญชีนักเรียนของคุณได้รับการสร้างเรียบร้อยแล้ว</p>
+          <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h3 style="color: #333; margin-top: 0;">ข้อมูลบัญชี:</h3>
+            <p style="margin: 5px 0;"><strong>อีเมล:</strong> ${user.email}</p>
+            <p style="margin: 5px 0;"><strong>สถานะ:</strong> <span style="color: #4CAF50;">Active</span></p>
+            <p style="margin: 5px 0;"><strong>วันที่สมัคร:</strong> ${new Date().toLocaleDateString('th-TH')}</p>
+          </div>
+          <p style="color: #666;">🚀 พร้อมเริ่มต้นการเรียนรู้แล้ว!</p>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/login" 
+               style="background: #4CAF50; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+              เข้าสู่ระบบ
+            </a>
+          </div>
+          <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+          <p style="color: #999; font-size: 14px; text-align: center;">
+            ขอบคุณที่เลือกใช้ LMS Platform<br>
+            หากมีคำถามสามารถติดต่อทีมสนับสนุนได้ที่ ${process.env.SUPPORT_EMAIL || 'support@lms.com'}
+          </p>
+        </div>
       </div>
     `
   }),
@@ -62,13 +81,68 @@ const emailTemplates = {
     subject: '⏳ การสมัครครูผู้สอน - รอการอนุมัติ',
     html: `
       <div style="max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif;">
-        <h2 style="color: #FF9800;">สวัสดี ${user.firstName} ${user.lastName}</h2>
-        <p>ขอบคุณที่สมัครเป็นครูผู้สอนกับเรา!</p>
-        <div style="background: #fff3cd; padding: 20px; border-radius: 8px; border-left: 4px solid #FF9800;">
-          <h3>🔍 สถานะ: รอการอนุมัติจากผู้ดูแลระบบ</h3>
-          <p>เราจะตรวจสอบข้อมูลและอนุมัติบัญชีภายใน 24-48 ชั่วโมง</p>
+        <div style="background: #FF9800; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+          <h1 style="margin: 0;">รอการอนุมัติ ⏳</h1>
         </div>
-        <p>📧 คุณจะได้รับอีเมลแจ้งเตือนเมื่อบัญชีได้รับการอนุมัติ</p>
+        <div style="padding: 20px; background: white; border-radius: 0 0 8px 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+          <h2 style="color: #333;">สวัสดี ${user.firstName} ${user.lastName}</h2>
+          <p style="color: #666; line-height: 1.6;">ขอบคุณที่สมัครเป็นครูผู้สอนกับเรา!</p>
+          <div style="background: #fff3cd; padding: 20px; border-radius: 8px; border-left: 4px solid #FF9800; margin: 20px 0;">
+            <h3 style="color: #856404; margin-top: 0;">🔍 สถานะ: รอการอนุมัติจากผู้ดูแลระบบ</h3>
+            <p style="color: #856404; margin: 5px 0;">เราจะตรวจสอบข้อมูลและอนุมัติบัญชีภายใน 24-48 ชั่วโมง</p>
+          </div>
+          <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h3 style="color: #333; margin-top: 0;">ข้อมูลการสมัคร:</h3>
+            <p style="margin: 5px 0;"><strong>อีเมล:</strong> ${user.email}</p>
+            <p style="margin: 5px 0;"><strong>ชื่อ-นามสกุล:</strong> ${user.firstName} ${user.lastName}</p>
+            <p style="margin: 5px 0;"><strong>วันที่สมัคร:</strong> ${new Date().toLocaleDateString('th-TH')}</p>
+          </div>
+          <p style="color: #666;">📧 คุณจะได้รับอีเมลแจ้งเตือนเมื่อบัญชีได้รับการอนุมัติ</p>
+          <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+          <p style="color: #999; font-size: 14px; text-align: center;">
+            ขอบคุณที่เลือกใช้ LMS Platform<br>
+            หากมีคำถามสามารถติดต่อทีมสนับสนุนได้ที่ ${process.env.SUPPORT_EMAIL || 'support@lms.com'}
+          </p>
+        </div>
+      </div>
+    `
+  }),
+
+  // ✅ Password Reset Email
+  passwordReset: (user, resetToken) => ({
+    subject: '🔒 รีเซ็ตรหัสผ่าน - LMS Platform',
+    html: `
+      <div style="max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif;">
+        <div style="background: #2196F3; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+          <h1 style="margin: 0;">รีเซ็ตรหัสผ่าน 🔒</h1>
+        </div>
+        <div style="padding: 20px; background: white; border-radius: 0 0 8px 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+          <h2 style="color: #333;">สวัสดี ${user.firstName} ${user.lastName}</h2>
+          <p style="color: #666; line-height: 1.6;">เราได้รับคำขอรีเซ็ตรหัสผ่านสำหรับบัญชีของคุณ</p>
+          <div style="background: #e3f2fd; padding: 20px; border-radius: 8px; border-left: 4px solid #2196F3; margin: 20px 0;">
+            <h3 style="color: #1976d2; margin-top: 0;">⏰ ลิงก์นี้จะหมดอายุใน 10 นาที</h3>
+            <p style="color: #1976d2; margin: 5px 0;">หากคุณไม่ได้เป็นผู้ขอรีเซ็ตรหัสผ่าน กรุณาเพิกเฉยต่ออีเมลนี้</p>
+          </div>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password/${resetToken}" 
+               style="background: #2196F3; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+              รีเซ็ตรหัสผ่าน
+            </a>
+          </div>
+          <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0;">
+            <p style="color: #666; margin: 0; font-size: 14px;">
+              <strong>หากปุ่มด้านบนไม่ทำงาน</strong> คัดลอกลิงก์นี้และวางในเบราว์เซอร์:<br>
+              <code style="background: #eee; padding: 2px 6px; border-radius: 3px; font-size: 12px;">
+                ${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password/${resetToken}
+              </code>
+            </p>
+          </div>
+          <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+          <p style="color: #999; font-size: 14px; text-align: center;">
+            ขอบคุณที่เลือกใช้ LMS Platform<br>
+            หากมีคำถามสามารถติดต่อทีมสนับสนุนได้ที่ ${process.env.SUPPORT_EMAIL || 'support@lms.com'}
+          </p>
+        </div>
       </div>
     `
   }),
@@ -78,123 +152,38 @@ const emailTemplates = {
     subject: '🎉 บัญชีครูผู้สอนได้รับการอนุมัติแล้ว!',
     html: `
       <div style="max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif;">
-        <h2 style="color: #4CAF50;">ยินดีด้วย ${user.firstName}!</h2>
-        <p>บัญชีครูผู้สอนของคุณได้รับการอนุมัติเรียบร้อยแล้ว! 🎊</p>
-        <div style="background: #d4edda; padding: 20px; border-radius: 8px;">
-          <h3>✅ คุณสามารถทำสิ่งต่อไปนี้ได้แล้ว:</h3>
-          <ul>
-            <li>📚 สร้างรายวิชาใหม่</li>
-            <li>📖 เพิ่มบทเรียนและเนื้อหา</li>
-            <li>🎯 สร้างแบบทดสอบ</li>
-            <li>👥 อนุมัติการสมัครเรียนของนักเรียน</li>
-          </ul>
+        <div style="background: #4CAF50; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+          <h1 style="margin: 0;">ยินดีด้วย! 🎉</h1>
         </div>
-        <a href="${process.env.FRONTEND_URL}/teacher/dashboard" 
-           style="background: #4CAF50; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px;">
-          เข้าสู่แดชบอร์ดครู
-        </a>
-      </div>
-    `
-  }),
-
-  // ✅ Enrollment Request (to Teacher)
-  enrollmentRequest: (enrollment, student, course) => ({
-    subject: `📝 มีนักเรียนขอเข้าเรียน: ${course.title}`,
-    html: `
-      <div style="max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif;">
-        <h2 style="color: #2196F3;">มีนักเรียนใหม่ขอเข้าเรียน!</h2>
-        <div style="background: #e3f2fd; padding: 20px; border-radius: 8px;">
-          <h3>👤 ข้อมูลนักเรียน:</h3>
-          <p><strong>ชื่อ:</strong> ${student.firstName} ${student.lastName}</p>
-          <p><strong>อีเมล:</strong> ${student.email}</p>
-          <p><strong>วันที่สมัคร:</strong> ${new Date(enrollment.enrolledAt).toLocaleString('th-TH')}</p>
-        </div>
-        <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin-top: 15px;">
-          <h3>📚 รายวิชา:</h3>
-          <p><strong>${course.title}</strong></p>
-          <p>${course.description}</p>
-        </div>
-        <p>👨‍🏫 กรุณาเข้าสู่ระบบเพื่ออนุมัติการเข้าเรียน</p>
-        <a href="${process.env.FRONTEND_URL}/teacher/courses/${course.id}/students" 
-           style="background: #2196F3; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px;">
-          จัดการนักเรียน
-        </a>
-      </div>
-    `
-  }),
-
-  // ✅ Enrollment Approved (to Student)
-  enrollmentApproved: (enrollment, course, teacher) => ({
-    subject: `✅ คุณได้รับอนุมัติเข้าเรียน: ${course.title}`,
-    html: `
-      <div style="max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif;">
-        <h2 style="color: #4CAF50;">ยินดีด้วย! 🎉</h2>
-        <p>คุณได้รับอนุมัติให้เข้าเรียนแล้ว!</p>
-        <div style="background: #d4edda; padding: 20px; border-radius: 8px;">
-          <h3>📚 รายวิชา: ${course.title}</h3>
-          <p>${course.description}</p>
-          <p><strong>👨‍🏫 ครูผู้สอน:</strong> ${teacher.firstName} ${teacher.lastName}</p>
-          <p><strong>✅ วันที่อนุมัติ:</strong> ${new Date().toLocaleString('th-TH')}</p>
-        </div>
-        <p>🚀 เริ่มเรียนได้เลย!</p>
-        <a href="${process.env.FRONTEND_URL}/courses/${course.id}" 
-           style="background: #4CAF50; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px;">
-          เข้าสู่บทเรียน
-        </a>
-      </div>
-    `
-  }),
-
-  // ✅ New Lesson Published (to Students)
-  newLessonPublished: (lesson, course) => ({
-    subject: `📖 บทเรียนใหม่: ${lesson.title}`,
-    html: `
-      <div style="max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif;">
-        <h2 style="color: #9C27B0;">มีบทเรียนใหม่แล้ว! 📚</h2>
-        <div style="background: #f3e5f5; padding: 20px; border-radius: 8px;">
-          <h3>📖 ${lesson.title}</h3>
-          <p><strong>รายวิชา:</strong> ${course.title}</p>
-          <p><strong>ประเภท:</strong> ${lesson.lessonType}</p>
-          <p><strong>ระยะเวลาโดยประมาณ:</strong> ${lesson.estimatedTime} นาที</p>
-          ${lesson.description ? `<p>${lesson.description}</p>` : ''}
-        </div>
-        <p>🎯 เริ่มเรียนเลย!</p>
-        <a href="${process.env.FRONTEND_URL}/lessons/${lesson.id}" 
-           style="background: #9C27B0; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px;">
-          เริ่มบทเรียน
-        </a>
-      </div>
-    `
-  }),
-
-  // ✅ Quiz Results (to Student)
-  quizResults: (quiz, attempt, student) => ({
-    subject: `📊 ผลการทำแบบทดสอบ: ${quiz.title}`,
-    html: `
-      <div style="max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif;">
-        <h2 style="color: #FF5722;">ผลการทำแบบทดสอบ 📊</h2>
-        <div style="background: #fff3e0; padding: 20px; border-radius: 8px;">
-          <h3>🎯 ${quiz.title}</h3>
-          <div style="font-size: 24px; text-align: center; margin: 20px 0;">
-            <span style="color: ${attempt.percentage >= quiz.passingScore ? '#4CAF50' : '#F44336'}; font-weight: bold;">
-              ${attempt.percentage}%
-            </span>
+        <div style="padding: 20px; background: white; border-radius: 0 0 8px 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+          <h2 style="color: #333;">สวัสดี ${user.firstName} ${user.lastName}</h2>
+          <p style="color: #666; line-height: 1.6;">บัญชีครูผู้สอนของคุณได้รับการอนุมัติเรียบร้อยแล้ว!</p>
+          <div style="background: #d4edda; padding: 20px; border-radius: 8px; border-left: 4px solid #4CAF50; margin: 20px 0;">
+            <h3 style="color: #155724; margin-top: 0;">✅ สถานะ: อนุมัติแล้ว</h3>
+            <p style="color: #155724; margin: 5px 0;">คุณสามารถเข้าสู่ระบบและเริ่มสอนได้ทันที</p>
           </div>
-          <p><strong>คะแนน:</strong> ${attempt.score}/${attempt.maxScore}</p>
-          <p><strong>เวลาที่ใช้:</strong> ${Math.floor(attempt.timeSpent / 60)} นาที</p>
-          <p><strong>สถานะ:</strong> 
-            <span style="color: ${attempt.percentage >= quiz.passingScore ? '#4CAF50' : '#F44336'};">
-              ${attempt.percentage >= quiz.passingScore ? '✅ ผ่าน' : '❌ ไม่ผ่าน'}
-            </span>
+          <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h3 style="color: #333; margin-top: 0;">สิทธิ์ที่คุณได้รับ:</h3>
+            <ul style="color: #666; margin: 0; padding-left: 20px;">
+              <li>สร้างและจัดการรายวิชา</li>
+              <li>สร้างบทเรียนและแบบทดสอบ</li>
+              <li>อนุมัตินักเรียนเข้าเรียน</li>
+              <li>ดูและวิเคราะห์ผลการเรียน</li>
+              <li>ติดต่อกับนักเรียน</li>
+            </ul>
+          </div>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/login" 
+               style="background: #4CAF50; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+              เข้าสู่ระบบ
+            </a>
+          </div>
+          <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+          <p style="color: #999; font-size: 14px; text-align: center;">
+            ขอบคุณที่เลือกใช้ LMS Platform<br>
+            หากมีคำถามสามารถติดต่อทีมสนับสนุนได้ที่ ${process.env.SUPPORT_EMAIL || 'support@lms.com'}
           </p>
         </div>
-        ${attempt.percentage < quiz.passingScore && attempt.attemptNumber < quiz.maxAttempts ? 
-          `<p>💪 คุณสามารถทำแบบทดสอบใหม่ได้!</p>
-           <a href="${process.env.FRONTEND_URL}/quizzes/${quiz.id}" 
-              style="background: #FF5722; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px;">
-             ทำใหม่
-           </a>` : ''
-        }
       </div>
     `
   })
@@ -206,13 +195,19 @@ const emailTemplates = {
 
 class EmailService {
   constructor() {
-    this.transporter = createTransport();
+    this.transporter = createTransporter();
   }
 
   async sendEmail(to, template) {
     try {
+      // Check if transporter is available
+      if (!this.transporter) {
+        console.warn('⚠️ Email transporter not available - skipping email send');
+        return { success: false, error: 'Email transporter not available' };
+      }
+
       const mailOptions = {
-        from: `"LMS Platform" <${process.env.EMAIL_USER || 'noreply@lms.com'}>`,
+        from: process.env.EMAIL_FROM || `"LMS Platform" <${process.env.EMAIL_USER || 'noreply@lms.com'}>`,
         to,
         subject: template.subject,
         html: template.html
@@ -220,15 +215,15 @@ class EmailService {
 
       const result = await this.transporter.sendMail(mailOptions);
       
-      console.log(`📧 Email sent to ${to}: ${template.subject}`);
+      console.log(`✅ Email sent successfully to ${to}: ${template.subject}`);
       
       if (process.env.NODE_ENV === 'development') {
-        console.log(`📧 Preview URL: ${nodemailer.getTestMessageUrl(result)}`);
+        console.log(`📧 Email preview URL: ${nodemailer.getTestMessageUrl(result)}`);
       }
       
       return { success: true, messageId: result.messageId };
     } catch (error) {
-      console.error(`❌ Email sending failed:`, error.message);
+      console.error(`❌ Email sending failed to ${to}:`, error.message);
       return { success: false, error: error.message };
     }
   }
@@ -238,45 +233,164 @@ class EmailService {
   // ========================================
 
   async sendWelcomeEmail(user) {
-    const template = user.role === 'student' 
-      ? emailTemplates.welcomeStudent(user)
-      : emailTemplates.teacherPendingApproval(user);
-    
-    return this.sendEmail(user.email, template);
+    try {
+      const template = user.role === 'student' 
+        ? emailTemplates.welcomeStudent(user)
+        : emailTemplates.teacherPendingApproval(user);
+      
+      return await this.sendEmail(user.email, template);
+    } catch (error) {
+      console.error('❌ Welcome email failed:', error.message);
+      return { success: false, error: error.message };
+    }
   }
 
   async sendTeacherApprovalEmail(user) {
-    const template = emailTemplates.teacherApproved(user);
-    return this.sendEmail(user.email, template);
+    try {
+      const template = emailTemplates.teacherApproved(user);
+      return await this.sendEmail(user.email, template);
+    } catch (error) {
+      console.error('❌ Teacher approval email failed:', error.message);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async sendPasswordResetEmail(user, resetToken) {
+    try {
+      const template = emailTemplates.passwordReset(user, resetToken);
+      return await this.sendEmail(user.email, template);
+    } catch (error) {
+      console.error('❌ Password reset email failed:', error.message);
+      return { success: false, error: error.message };
+    }
   }
 
   async sendEnrollmentRequestEmail(teacher, enrollment, student, course) {
-    const template = emailTemplates.enrollmentRequest(enrollment, student, course);
-    return this.sendEmail(teacher.email, template);
+    try {
+      const template = {
+        subject: `🎓 มีนักเรียนใหม่ขอเข้าเรียน: ${course.title}`,
+        html: `
+          <div style="max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif;">
+            <h2 style="color: #333;">มีนักเรียนขอเข้าเรียน</h2>
+            <p>นักเรียน: ${student.firstName} ${student.lastName}</p>
+            <p>รายวิชา: ${course.title}</p>
+            <p>วันที่สมัคร: ${new Date(enrollment.createdAt).toLocaleDateString('th-TH')}</p>
+            <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/teacher/enrollments" 
+               style="background: #4CAF50; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">
+              ตรวจสอบและอนุมัติ
+            </a>
+          </div>
+        `
+      };
+      
+      return await this.sendEmail(teacher.email, template);
+    } catch (error) {
+      console.error('❌ Enrollment request email failed:', error.message);
+      return { success: false, error: error.message };
+    }
   }
 
   async sendEnrollmentApprovedEmail(student, enrollment, course, teacher) {
-    const template = emailTemplates.enrollmentApproved(enrollment, course, teacher);
-    return this.sendEmail(student.email, template);
+    try {
+      const template = {
+        subject: `✅ คุณได้รับการอนุมัติเข้าเรียน: ${course.title}`,
+        html: `
+          <div style="max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif;">
+            <h2 style="color: #4CAF50;">การลงทะเบียนเรียนได้รับการอนุมัติ!</h2>
+            <p>รายวิชา: ${course.title}</p>
+            <p>ครูผู้สอน: ${teacher.firstName} ${teacher.lastName}</p>
+            <p>วันที่อนุมัติ: ${new Date().toLocaleDateString('th-TH')}</p>
+            <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/courses/${course.id}" 
+               style="background: #4CAF50; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">
+              เข้าเรียน
+            </a>
+          </div>
+        `
+      };
+      
+      return await this.sendEmail(student.email, template);
+    } catch (error) {
+      console.error('❌ Enrollment approved email failed:', error.message);
+      return { success: false, error: error.message };
+    }
   }
 
   async sendNewLessonEmail(students, lesson, course) {
-    const template = emailTemplates.newLessonPublished(lesson, course);
-    
-    const results = await Promise.allSettled(
-      students.map(student => this.sendEmail(student.email, template))
-    );
-    
-    return {
-      sent: results.filter(r => r.status === 'fulfilled' && r.value.success).length,
-      failed: results.filter(r => r.status === 'rejected' || !r.value.success).length,
-      total: students.length
-    };
+    try {
+      const template = {
+        subject: `📚 บทเรียนใหม่: ${lesson.title}`,
+        html: `
+          <div style="max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif;">
+            <h2 style="color: #333;">บทเรียนใหม่พร้อมแล้ว!</h2>
+            <p>รายวิชา: ${course.title}</p>
+            <p>บทเรียน: ${lesson.title}</p>
+            <p>เวลาโดยประมาณ: ${lesson.estimatedTime} นาที</p>
+            <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/lessons/${lesson.id}" 
+               style="background: #2196F3; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">
+              เริ่มเรียน
+            </a>
+          </div>
+        `
+      };
+      
+      const results = await Promise.allSettled(
+        students.map(student => this.sendEmail(student.email, template))
+      );
+      
+      return {
+        sent: results.filter(r => r.status === 'fulfilled' && r.value.success).length,
+        failed: results.filter(r => r.status === 'rejected' || !r.value.success).length,
+        total: students.length
+      };
+    } catch (error) {
+      console.error('❌ New lesson email failed:', error.message);
+      return { success: false, error: error.message };
+    }
   }
 
   async sendQuizResultsEmail(student, quiz, attempt) {
-    const template = emailTemplates.quizResults(quiz, attempt, student);
-    return this.sendEmail(student.email, template);
+    try {
+      const template = {
+        subject: `📊 ผลแบบทดสอบ: ${quiz.title}`,
+        html: `
+          <div style="max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif;">
+            <h2 style="color: #333;">ผลแบบทดสอบ</h2>
+            <p>แบบทดสอบ: ${quiz.title}</p>
+            <p>คะแนน: ${attempt.score}/${quiz.maxScore} (${attempt.percentage}%)</p>
+            <p>สถานะ: ${attempt.percentage >= quiz.passingScore ? '✅ ผ่าน' : '❌ ไม่ผ่าน'}</p>
+            <p>วันที่ทำ: ${new Date(attempt.submittedAt).toLocaleDateString('th-TH')}</p>
+            <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/quiz-results/${attempt.id}" 
+               style="background: #FF9800; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">
+              ดูผลรายละเอียด
+            </a>
+          </div>
+        `
+      };
+      
+      return await this.sendEmail(student.email, template);
+    } catch (error) {
+      console.error('❌ Quiz results email failed:', error.message);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // ========================================
+  // UTILITY FUNCTIONS
+  // ========================================
+
+  async testEmailConnection() {
+    try {
+      if (!this.transporter) {
+        return { success: false, error: 'Email transporter not available' };
+      }
+
+      await this.transporter.verify();
+      console.log('✅ Email connection test successful');
+      return { success: true, message: 'Email connection successful' };
+    } catch (error) {
+      console.error('❌ Email connection test failed:', error.message);
+      return { success: false, error: error.message };
+    }
   }
 }
 
@@ -302,19 +416,19 @@ const sendNotificationWithEmail = async (userId, notificationType, data) => {
     // Send email notification based on type
     switch (notificationType) {
       case 'enrollment_request':
-        return emailService.sendEnrollmentRequestEmail(
+        return await emailService.sendEnrollmentRequestEmail(
           data.teacher, data.enrollment, data.student, data.course
         );
       case 'enrollment_approved':
-        return emailService.sendEnrollmentApprovedEmail(
+        return await emailService.sendEnrollmentApprovedEmail(
           data.student, data.enrollment, data.course, data.teacher
         );
       case 'new_lesson':
-        return emailService.sendNewLessonEmail(
+        return await emailService.sendNewLessonEmail(
           data.students, data.lesson, data.course
         );
       case 'quiz_results':
-        return emailService.sendQuizResultsEmail(
+        return await emailService.sendQuizResultsEmail(
           data.student, data.quiz, data.attempt
         );
       default:

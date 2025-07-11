@@ -246,6 +246,42 @@ const courseSchemas = {
   })
 };
 
+// ========================================
+// NEW: ENROLLMENT VALIDATION SCHEMAS  🆕
+// ========================================
+const enrollmentSchemas = {
+  updateStatus: Joi.object({
+    status: Joi.string()
+      .valid('approved', 'rejected')
+      .required()
+      .messages({
+        'any.only': 'Status must be either approved or rejected',
+        'any.required': 'Status is required'
+      }),
+    reason: Joi.string()
+      .max(500)
+      .optional()
+      .allow('')
+      .messages({
+        'string.max': 'Reason cannot exceed 500 characters'
+      }),
+    rejectionReason: Joi.string()
+      .max(500)
+      .optional()
+      .allow('')
+      .when('status', {
+        is: 'rejected',
+        then: Joi.string().required().messages({
+          'any.required': 'Rejection reason is required when rejecting enrollment'
+        }),
+        otherwise: Joi.optional()
+      })
+      .messages({
+        'string.max': 'Rejection reason cannot exceed 500 characters'
+      })
+  })
+};
+
 // Quiz validation schemas
 const quizSchemas = {
   create: Joi.object({
@@ -373,7 +409,9 @@ const validateParams = (schema) => {
   };
 };
 
-// Common parameter schemas
+// ========================================
+// COMMON PARAMETER SCHEMAS
+// ========================================
 const paramSchemas = {
   id: Joi.object({
     id: Joi.number()
@@ -399,6 +437,28 @@ const paramSchemas = {
       .integer()
       .positive()
       .required()
+  }),
+
+  // 🆕 NEW: Course and Student ID validation for enrollment
+  courseStudentParams: Joi.object({
+    id: Joi.number()
+      .integer()
+      .positive()
+      .required()
+      .messages({
+        'number.base': 'Course ID must be a number',
+        'number.positive': 'Course ID must be positive',
+        'any.required': 'Course ID is required'
+      }),
+    studentId: Joi.number()
+      .integer()
+      .positive()
+      .required()
+      .messages({
+        'number.base': 'Student ID must be a number',
+        'number.positive': 'Student ID must be positive',
+        'any.required': 'Student ID is required'
+      })
   })
 };
 
@@ -428,6 +488,7 @@ module.exports = {
   validateParams,
   userSchemas,
   courseSchemas,
+  enrollmentSchemas,    // 🆕 NEW
   quizSchemas,
   paramSchemas,
   querySchemas
