@@ -8,29 +8,29 @@
 
 // Base Components
 export { default as Button } from './Button';
-export { 
+export {
   PrimaryButton,
-  SecondaryButton, 
+  SecondaryButton,
   SuccessButton,
   WarningButton,
   DangerButton,
   OutlineButton,
   GhostButton,
-  GradientButton 
+  GradientButton
 } from './Button';
 
 export { default as Card } from './Card';
-export { 
+export {
   CardHeader,
   CardTitle,
   CardContent,
   CardFooter,
   CourseCard,
-  StatsCard 
+  StatsCard
 } from './Card';
 
 export { default as Input } from './Input';
-export { 
+export {
   SearchInput,
   PasswordInput,
   Textarea,
@@ -38,17 +38,11 @@ export {
   InputGroup,
   InputLabel,
   InputError,
-  InputIcon 
+  InputIcon
 } from './Input';
 
-// Layout Components
-export { 
-  Layout,
-  StudentLayout,
-  TeacherLayout,
-  AdminLayout,
-  PublicLayout
-} from '../layout';
+// Layout Components removed to prevent circular dependencies
+// Please import Layout components directly from '../layout'
 
 // Constants only (ไม่ใช้ component references)
 export const UI_COMPONENT_VARIANTS = {

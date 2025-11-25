@@ -16,10 +16,10 @@ const { Op } = require('sequelize');
 const getCourseQuizzes = catchAsync(async (req, res, next) => {
   const { courseId } = req.params;
   const { includeQuestions = false } = req.query;
-  
+
   try {
     const whereClause = { courseId };
-    
+
     // Students can only see published quizzes
     if (req.user.role === 'student') {
       whereClause.isPublished = true;
@@ -29,7 +29,7 @@ const getCourseQuizzes = catchAsync(async (req, res, next) => {
         { availableUntil: { [Op.gte]: new Date() } }
       ];
     }
-    
+
     const quizzes = await Quiz.findAll({
       where: whereClause,
       include: [
@@ -42,26 +42,26 @@ const getCourseQuizzes = catchAsync(async (req, res, next) => {
           model: QuizQuestion,
           as: 'questions',
           order: [['orderIndex', 'ASC']],
-          attributes: req.user.role === 'student' 
+          attributes: req.user.role === 'student'
             ? ['id', 'questionText', 'questionType', 'points', 'orderIndex', 'options']
             : undefined // Teachers/admin get all fields including correctAnswer
         }] : [])
       ],
       order: [['created_at', 'DESC']]
     });
-    
+
     // For students, get their attempt history
     let userAttempts = [];
     if (req.user.role === 'student') {
       userAttempts = await QuizAttempt.findAll({
-        where: { 
+        where: {
           studentId: req.user.id,
           quizId: { [Op.in]: quizzes.map(q => q.id) }
         },
         order: [['attemptNumber', 'DESC']]
       }).catch(() => []);
     }
-    
+
     // Add attempt info to quizzes
     const quizzesWithAttempts = quizzes.map(quiz => {
       const attempts = userAttempts.filter(a => a.quizId === quiz.id);
@@ -70,11 +70,11 @@ const getCourseQuizzes = catchAsync(async (req, res, next) => {
         userAttempts: attempts.length,
         lastAttempt: attempts[0] || null,
         canAttempt: attempts.length < quiz.maxAttempts,
-        timeRemaining: quiz.availableUntil ? 
+        timeRemaining: quiz.availableUntil ?
           Math.max(0, new Date(quiz.availableUntil) - new Date()) : null
       };
     });
-    
+
     res.status(200).json({
       success: true,
       data: {
@@ -82,7 +82,7 @@ const getCourseQuizzes = catchAsync(async (req, res, next) => {
         total: quizzes.length
       }
     });
-    
+
   } catch (error) {
     // Mock data if models don't exist
     res.status(200).json({
@@ -137,7 +137,7 @@ const createQuiz = catchAsync(async (req, res, next) => {
     availableUntil,
     questions
   } = req.body;
-  
+
   try {
     // Check if user owns the course
     const course = await Course.findByPk(courseId, {
@@ -149,15 +149,15 @@ const createQuiz = catchAsync(async (req, res, next) => {
         }
       ]
     });
-    
+
     if (!course) {
       return next(new AppError('Course not found', 404));
     }
-    
+
     if (req.user.role !== 'admin' && course.teacherId !== req.user.id) {
       return next(new AppError('You can only create quizzes for your own courses', 403));
     }
-    
+
     // Create quiz
     const quiz = await Quiz.create({
       courseId,
@@ -175,7 +175,7 @@ const createQuiz = catchAsync(async (req, res, next) => {
       availableUntil,
       isPublished: false
     });
-    
+
     // Create questions if provided
     if (questions && questions.length > 0) {
       const quizQuestions = questions.map((q, index) => ({
@@ -188,10 +188,10 @@ const createQuiz = catchAsync(async (req, res, next) => {
         orderIndex: q.orderIndex || index + 1,
         explanation: q.explanation
       }));
-      
+
       await QuizQuestion.bulkCreate(quizQuestions);
     }
-    
+
     // Return created quiz with questions
     const createdQuiz = await Quiz.findByPk(quiz.id, {
       include: [
@@ -233,7 +233,7 @@ const createQuiz = catchAsync(async (req, res, next) => {
     } catch (emailError) {
       console.error('❌ Failed to send quiz creation email:', emailError.message);
     }
-    
+
     res.status(201).json({
       success: true,
       message: 'Quiz created successfully',
@@ -241,7 +241,7 @@ const createQuiz = catchAsync(async (req, res, next) => {
         quiz: createdQuiz
       }
     });
-    
+
   } catch (error) {
     return next(new AppError('Error creating quiz', 500));
   }
@@ -256,11 +256,11 @@ const createQuiz = catchAsync(async (req, res, next) => {
 // @access  Student (enrolled)
 const startQuizAttempt = catchAsync(async (req, res, next) => {
   const { id } = req.params;
-  
+
   if (req.user.role !== 'student') {
     return next(new AppError('Only students can take quizzes', 403));
   }
-  
+
   try {
     const quiz = await Quiz.findByPk(id, {
       include: [
@@ -272,35 +272,35 @@ const startQuizAttempt = catchAsync(async (req, res, next) => {
         }
       ]
     });
-    
+
     if (!quiz) {
       return next(new AppError('Quiz not found', 404));
     }
-    
+
     if (!quiz.isPublished) {
       return next(new AppError('Quiz is not published', 400));
     }
-    
+
     // Check availability
     const now = new Date();
     if (quiz.availableFrom && now < quiz.availableFrom) {
       return next(new AppError('Quiz is not yet available', 400));
     }
-    
+
     if (quiz.availableUntil && now > quiz.availableUntil) {
       return next(new AppError('Quiz is no longer available', 400));
     }
-    
+
     // Check previous attempts
     const previousAttempts = await QuizAttempt.findAll({
       where: { quizId: id, studentId: req.user.id },
       order: [['attemptNumber', 'DESC']]
     });
-    
+
     if (previousAttempts.length >= quiz.maxAttempts) {
       return next(new AppError('Maximum attempts reached', 400));
     }
-    
+
     // Check for incomplete attempt
     const incompleteAttempt = previousAttempts.find(a => !a.isCompleted);
     if (incompleteAttempt) {
@@ -315,12 +315,12 @@ const startQuizAttempt = catchAsync(async (req, res, next) => {
             timeLimit: quiz.timeLimit,
             questions: quiz.questions
           },
-          timeRemaining: quiz.timeLimit ? 
+          timeRemaining: quiz.timeLimit ?
             Math.max(0, quiz.timeLimit * 60 - Math.floor((now - incompleteAttempt.startedAt) / 1000)) : null
         }
       });
     }
-    
+
     // Create new attempt
     const attemptNumber = previousAttempts.length + 1;
     const attempt = await QuizAttempt.create({
@@ -331,13 +331,13 @@ const startQuizAttempt = catchAsync(async (req, res, next) => {
       answers: {},
       isCompleted: false
     });
-    
+
     // Randomize questions if enabled
     let questions = quiz.questions;
     if (quiz.randomizeQuestions) {
       questions = [...questions].sort(() => Math.random() - 0.5);
     }
-    
+
     res.status(200).json({
       success: true,
       message: 'Quiz attempt started',
@@ -357,7 +357,7 @@ const startQuizAttempt = catchAsync(async (req, res, next) => {
         timeRemaining: quiz.timeLimit ? quiz.timeLimit * 60 : null
       }
     });
-    
+
   } catch (error) {
     return next(new AppError('Error starting quiz attempt', 500));
   }
@@ -369,22 +369,22 @@ const startQuizAttempt = catchAsync(async (req, res, next) => {
 const submitQuizAnswer = catchAsync(async (req, res, next) => {
   const { id } = req.params;
   const { questionId, answer, timeSpent } = req.body;
-  
+
   try {
     // Get active attempt
     const attempt = await QuizAttempt.findOne({
-      where: { 
-        quizId: id, 
-        studentId: req.user.id, 
-        isCompleted: false 
+      where: {
+        quizId: id,
+        studentId: req.user.id,
+        isCompleted: false
       },
       order: [['attemptNumber', 'DESC']]
     });
-    
+
     if (!attempt) {
       return next(new AppError('No active quiz attempt found', 400));
     }
-    
+
     // Check if quiz is still within time limit
     const quiz = await Quiz.findByPk(id);
     if (quiz.timeLimit) {
@@ -394,13 +394,13 @@ const submitQuizAnswer = catchAsync(async (req, res, next) => {
         return autoSubmitQuiz(attempt, res);
       }
     }
-    
+
     // Get question details
     const question = await QuizQuestion.findByPk(questionId);
     if (!question || question.quizId !== parseInt(id)) {
       return next(new AppError('Invalid question', 400));
     }
-    
+
     // Save/update answer
     const answers = attempt.answers || {};
     answers[questionId] = {
@@ -408,10 +408,10 @@ const submitQuizAnswer = catchAsync(async (req, res, next) => {
       timeSpent: timeSpent || 0,
       answeredAt: new Date()
     };
-    
+
     attempt.answers = answers;
     await attempt.save();
-    
+
     res.status(200).json({
       success: true,
       message: 'Answer saved',
@@ -421,7 +421,7 @@ const submitQuizAnswer = catchAsync(async (req, res, next) => {
         totalAnswered: Object.keys(answers).length
       }
     });
-    
+
   } catch (error) {
     return next(new AppError('Error saving answer', 500));
   }
@@ -432,23 +432,23 @@ const submitQuizAnswer = catchAsync(async (req, res, next) => {
 // @access  Student (with active attempt)
 const submitQuiz = catchAsync(async (req, res, next) => {
   const { id } = req.params;
-  
+
   try {
     const attempt = await QuizAttempt.findOne({
-      where: { 
-        quizId: id, 
-        studentId: req.user.id, 
-        isCompleted: false 
+      where: {
+        quizId: id,
+        studentId: req.user.id,
+        isCompleted: false
       },
       order: [['attemptNumber', 'DESC']]
     });
-    
+
     if (!attempt) {
       return next(new AppError('No active quiz attempt found', 400));
     }
-    
+
     await completeQuizAttempt(attempt);
-    
+
     const completedAttempt = await QuizAttempt.findByPk(attempt.id);
 
     // 📧 SEND QUIZ RESULTS EMAIL TO STUDENT
@@ -557,7 +557,7 @@ const submitQuiz = catchAsync(async (req, res, next) => {
         timestamp: new Date()
       });
     }
-    
+
     res.status(200).json({
       success: true,
       message: 'Quiz submitted successfully',
@@ -574,7 +574,7 @@ const submitQuiz = catchAsync(async (req, res, next) => {
         }
       }
     });
-    
+
   } catch (error) {
     return next(new AppError('Error submitting quiz', 500));
   }
@@ -589,15 +589,15 @@ const completeQuizAttempt = async (attempt) => {
     const quiz = await Quiz.findByPk(attempt.quizId, {
       include: [{ model: QuizQuestion, as: 'questions' }]
     });
-    
+
     let totalScore = 0;
     let maxScore = 0;
     const answers = attempt.answers || {};
-    
+
     // Calculate score
     for (const question of quiz.questions) {
       maxScore += question.points;
-      
+
       const userAnswer = answers[question.id];
       if (userAnswer) {
         const isCorrect = checkAnswer(question, userAnswer.answer);
@@ -606,9 +606,9 @@ const completeQuizAttempt = async (attempt) => {
         }
       }
     }
-    
+
     const percentage = maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0;
-    
+
     // Update attempt
     attempt.score = totalScore;
     attempt.maxScore = maxScore;
@@ -616,9 +616,9 @@ const completeQuizAttempt = async (attempt) => {
     attempt.isCompleted = true;
     attempt.submittedAt = new Date();
     attempt.timeSpent = Math.floor((new Date() - attempt.startedAt) / 1000);
-    
+
     await attempt.save();
-    
+
     return attempt;
   } catch (error) {
     throw new Error('Error completing quiz attempt');
@@ -627,7 +627,7 @@ const completeQuizAttempt = async (attempt) => {
 
 const checkAnswer = (question, userAnswer) => {
   if (!question.correctAnswer) return false;
-  
+
   switch (question.questionType) {
     case 'multiple_choice':
     case 'true_false':
@@ -666,7 +666,7 @@ const autoSubmitQuiz = async (attempt, res) => {
   try {
     attempt.autoSubmitted = true;
     await completeQuizAttempt(attempt);
-    
+
     res.status(200).json({
       success: true,
       message: 'Quiz auto-submitted due to time limit',
@@ -687,9 +687,259 @@ const autoSubmitQuiz = async (attempt, res) => {
   }
 };
 
+// ========================================
+// NEWLY IMPLEMENTED FUNCTIONS
+// ========================================
+
+// @desc    Get single quiz details
+// @route   GET /api/quizzes/:id
+// @access  Enrolled students/Teachers/Admin
+const getQuiz = catchAsync(async (req, res, next) => {
+  const { id } = req.params;
+
+  try {
+    const quiz = await Quiz.findByPk(id, {
+      include: [
+        {
+          model: Course,
+          as: 'course',
+          attributes: ['id', 'title', 'teacherId'],
+          include: [
+            {
+              model: User,
+              as: 'teacher',
+              attributes: ['firstName', 'lastName']
+            }
+          ]
+        },
+        {
+          model: QuizQuestion,
+          as: 'questions',
+          attributes: req.user.role === 'student'
+            ? ['id', 'questionText', 'questionType', 'points', 'orderIndex', 'options'] // Hide correct answer for students
+            : undefined, // Show all for teachers
+          order: [['orderIndex', 'ASC']]
+        }
+      ]
+    });
+
+    if (!quiz) {
+      return next(new AppError('Quiz not found', 404));
+    }
+
+    // Check access
+    if (req.user.role === 'student') {
+      // Check if enrolled (middleware should handle this, but double check course access if needed)
+      // Also check if published
+      if (!quiz.isPublished) {
+        return next(new AppError('Quiz is not published', 403));
+      }
+    } else if (req.user.role === 'teacher') {
+      // Check ownership
+      if (quiz.course.teacherId !== req.user.id) {
+        // Teachers can only view their own quizzes fully, or maybe public info?
+        // Assuming strict ownership for management
+        // But maybe they can view if they are just viewing? 
+        // For now, allow view if teacher, but management is restricted.
+      }
+    }
+
+    // Get student progress if student
+    let studentProgress = null;
+    if (req.user.role === 'student') {
+      const attempts = await QuizAttempt.findAll({
+        where: { quizId: id, studentId: req.user.id },
+        order: [['attemptNumber', 'DESC']]
+      });
+
+      studentProgress = {
+        attempts: attempts,
+        bestScore: attempts.reduce((max, a) => Math.max(max, a.score || 0), 0),
+        attemptsCount: attempts.length,
+        canAttempt: attempts.length < quiz.maxAttempts
+      };
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        quiz,
+        studentProgress,
+        canManage: req.user.role === 'admin' || (req.user.role === 'teacher' && quiz.course.teacherId === req.user.id)
+      }
+    });
+
+  } catch (error) {
+    return next(new AppError('Error fetching quiz', 500));
+  }
+});
+
+// @desc    Update quiz
+// @route   PUT /api/quizzes/:id
+// @access  Teacher (own courses)/Admin
+const updateQuiz = catchAsync(async (req, res, next) => {
+  const { id } = req.params;
+  const {
+    title,
+    description,
+    quizType,
+    timeLimit,
+    maxAttempts,
+    passingScore,
+    randomizeQuestions,
+    showCorrectAnswers,
+    showResultsImmediately,
+    availableFrom,
+    availableUntil,
+    questions
+  } = req.body;
+
+  try {
+    const quiz = await Quiz.findByPk(id, {
+      include: [{ model: Course, as: 'course' }]
+    });
+
+    if (!quiz) {
+      return next(new AppError('Quiz not found', 404));
+    }
+
+    // Check ownership
+    if (req.user.role !== 'admin' && quiz.course.teacherId !== req.user.id) {
+      return next(new AppError('You can only update quizzes for your own courses', 403));
+    }
+
+    // Update quiz fields
+    const updateFields = {
+      title, description, quizType, timeLimit, maxAttempts, passingScore,
+      randomizeQuestions, showCorrectAnswers, showResultsImmediately,
+      availableFrom, availableUntil
+    };
+
+    Object.keys(updateFields).forEach(key => {
+      if (updateFields[key] !== undefined) {
+        quiz[key] = updateFields[key];
+      }
+    });
+
+    await quiz.save();
+
+    // Update questions if provided
+    if (questions && Array.isArray(questions)) {
+      // This is a simplified update: delete old and create new
+      // In production, you might want to update existing ones to preserve IDs
+      await QuizQuestion.destroy({ where: { quizId: id } });
+
+      const newQuestions = questions.map((q, index) => ({
+        quizId: id,
+        questionText: q.questionText,
+        questionType: q.questionType,
+        options: q.options || [],
+        correctAnswer: q.correctAnswer,
+        points: q.points || 10,
+        orderIndex: q.orderIndex || index + 1,
+        explanation: q.explanation
+      }));
+
+      await QuizQuestion.bulkCreate(newQuestions);
+    }
+
+    // Return updated quiz
+    const updatedQuiz = await Quiz.findByPk(id, {
+      include: [{ model: QuizQuestion, as: 'questions', order: [['orderIndex', 'ASC']] }]
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Quiz updated successfully',
+      data: {
+        quiz: updatedQuiz
+      }
+    });
+
+  } catch (error) {
+    return next(new AppError('Error updating quiz', 500));
+  }
+});
+
+// @desc    Delete quiz
+// @route   DELETE /api/quizzes/:id
+// @access  Teacher (own courses)/Admin
+const deleteQuiz = catchAsync(async (req, res, next) => {
+  const { id } = req.params;
+
+  try {
+    const quiz = await Quiz.findByPk(id, {
+      include: [{ model: Course, as: 'course' }]
+    });
+
+    if (!quiz) {
+      return next(new AppError('Quiz not found', 404));
+    }
+
+    // Check ownership
+    if (req.user.role !== 'admin' && quiz.course.teacherId !== req.user.id) {
+      return next(new AppError('You can only delete quizzes for your own courses', 403));
+    }
+
+    await quiz.destroy();
+
+    res.status(200).json({
+      success: true,
+      message: 'Quiz deleted successfully'
+    });
+
+  } catch (error) {
+    return next(new AppError('Error deleting quiz', 500));
+  }
+});
+
+// @desc    Publish/unpublish quiz
+// @route   PATCH /api/quizzes/:id/publish
+// @access  Teacher (own courses)/Admin
+const togglePublishQuiz = catchAsync(async (req, res, next) => {
+  const { id } = req.params;
+  const { isPublished } = req.body;
+
+  try {
+    const quiz = await Quiz.findByPk(id, {
+      include: [{ model: Course, as: 'course' }]
+    });
+
+    if (!quiz) {
+      return next(new AppError('Quiz not found', 404));
+    }
+
+    // Check ownership
+    if (req.user.role !== 'admin' && quiz.course.teacherId !== req.user.id) {
+      return next(new AppError('You can only publish quizzes for your own courses', 403));
+    }
+
+    quiz.isPublished = isPublished;
+    await quiz.save();
+
+    res.status(200).json({
+      success: true,
+      message: `Quiz ${isPublished ? 'published' : 'unpublished'} successfully`,
+      data: {
+        quiz: {
+          id: quiz.id,
+          isPublished: quiz.isPublished
+        }
+      }
+    });
+
+  } catch (error) {
+    return next(new AppError('Error updating quiz status', 500));
+  }
+});
+
 module.exports = {
   getCourseQuizzes,
+  getQuiz,
   createQuiz,
+  updateQuiz,
+  deleteQuiz,
+  togglePublishQuiz,
   startQuizAttempt,
   submitQuizAnswer,
   submitQuiz
