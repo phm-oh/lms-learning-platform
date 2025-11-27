@@ -73,6 +73,18 @@ const Quiz = sequelize.define('Quiz', {
     defaultValue: false,
     field: 'is_published'
   },
+  isActive: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: true,
+    field: 'is_active',
+    comment: 'เปิด/ปิดการทำแบบทดสอบ (แยกจาก isPublished - ใช้สำหรับปิดชั่วคราว)'
+  },
+  allowRetake: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: true,
+    field: 'allow_retake',
+    comment: 'อนุญาตให้ทำซ้ำได้หรือไม่ (ถ้า false แม้จะยังไม่ถึง maxAttempts ก็ทำซ้ำไม่ได้)'
+  },
   availableFrom: {
     type: DataTypes.DATE,
     field: 'available_from'
@@ -80,6 +92,13 @@ const Quiz = sequelize.define('Quiz', {
   availableUntil: {
     type: DataTypes.DATE,
     field: 'available_until'
+  },
+  orderIndex: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+    allowNull: false,
+    field: 'order_index',
+    comment: 'เรียงลำดับ Quiz: Course-level (lessonId=null) หรือ Lesson-level (lessonId!=null)'
   }
 }, {
   tableName: 'quizzes',
@@ -94,7 +113,7 @@ Quiz.prototype.isAvailable = function() {
   const fromDate = this.availableFrom || new Date(0);
   const untilDate = this.availableUntil || new Date('2099-12-31');
   
-  return this.isPublished && now >= fromDate && now <= untilDate;
+  return this.isPublished && this.isActive && now >= fromDate && now <= untilDate;
 };
 
 Quiz.prototype.getQuestionsCount = async function() {
@@ -126,11 +145,22 @@ Quiz.prototype.getStudentAttempts = async function(studentId) {
 Quiz.prototype.canStudentTakeQuiz = async function(studentId) {
   if (!this.isAvailable()) return { canTake: false, reason: 'Quiz not available' };
   
+  // Check if quiz is active
+  if (!this.isActive) {
+    return { canTake: false, reason: 'Quiz is currently disabled' };
+  }
+  
   const attempts = await this.getStudentAttempts(studentId);
   const completedAttempts = attempts.filter(a => a.isCompleted).length;
   
+  // Check max attempts
   if (completedAttempts >= this.maxAttempts) {
     return { canTake: false, reason: 'Maximum attempts reached' };
+  }
+  
+  // Check allowRetake - if false and has any completed attempt, cannot retake
+  if (!this.allowRetake && completedAttempts > 0) {
+    return { canTake: false, reason: 'Retake is not allowed for this quiz' };
   }
   
   return { canTake: true };
@@ -145,7 +175,11 @@ Quiz.findByCourse = function(courseId, includeUnpublished = false) {
   
   return this.findAll({
     where: whereClause,
-    order: [['created_at', 'DESC']]
+    order: [
+      ['lessonId', 'ASC NULLS LAST'], // Course-level (null) มาก่อน
+      ['orderIndex', 'ASC'],           // เรียงตาม orderIndex
+      ['created_at', 'ASC']
+    ]
   });
 };
 
@@ -155,6 +189,7 @@ Quiz.findAvailable = function(courseId) {
     where: {
       courseId,
       isPublished: true,
+      isActive: true,
       [sequelize.Op.or]: [
         { availableFrom: null },
         { availableFrom: { [sequelize.Op.lte]: now } }

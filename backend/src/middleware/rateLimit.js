@@ -29,7 +29,7 @@ const generalLimiter = rateLimit({
 // Strict rate limiting for authentication endpoints
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // Limit each IP to 5 auth requests per windowMs
+  max: process.env.NODE_ENV === 'development' ? 1000 : 5, // Very high limit in development (almost unlimited)
   message: {
     success: false,
     error: 'Too many authentication attempts, please try again later.',
@@ -39,7 +39,21 @@ const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: true, // Don't count successful requests
-  skipFailedRequests: false // Count failed requests
+  skipFailedRequests: true, // ⚠️ IMPORTANT: Don't count failed requests in development (for testing)
+  skip: (req) => {
+    // Skip rate limiting completely in development mode
+    if (process.env.NODE_ENV === 'development') {
+      return true; // Skip all rate limiting in development
+    }
+    // Skip rate limiting for localhost in production (for testing)
+    const ip = req.ip || req.connection?.remoteAddress || req.socket?.remoteAddress;
+    const isLocalhost = ip === '127.0.0.1' || 
+                       ip === '::1' || 
+                       ip === '::ffff:127.0.0.1' ||
+                       ip?.includes('127.0.0.1') ||
+                       ip?.includes('localhost');
+    return isLocalhost;
+  }
 });
 
 // Very strict rate limiting for password reset

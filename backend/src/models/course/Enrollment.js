@@ -58,6 +58,11 @@ const Enrollment = sequelize.define('Enrollment', {
     type: DataTypes.DECIMAL(5, 2),
     field: 'final_grade'
   },
+  rejectionReason: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+    field: 'rejection_reason'
+  },
   certificateIssued: {
     type: DataTypes.BOOLEAN,
     defaultValue: false,

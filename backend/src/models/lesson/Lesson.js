@@ -81,46 +81,61 @@ const Lesson = sequelize.define('Lesson', {
 
 // Instance methods
 Lesson.prototype.isAccessibleToStudent = async function(studentId) {
-  if (this.status !== 'published') return false;
-  
-  // Check if student is enrolled in the course
-  const Enrollment = require('../course/Enrollment');
-  const enrollment = await Enrollment.findOne({
-    where: {
-      courseId: this.courseId,
-      studentId: studentId,
-      status: 'approved',
-      isActive: true
-    }
-  });
-  
-  if (!enrollment) return false;
-  
-  // Check prerequisites
-  if (this.prerequisites && this.prerequisites.length > 0) {
-    const LessonProgress = require('./LessonProgress');
-    const completedPrereqs = await LessonProgress.count({
+  try {
+    if (this.status !== 'published') return false;
+    
+    // Check if student is enrolled in the course
+    const Enrollment = require('../course/Enrollment');
+    const enrollment = await Enrollment.findOne({
       where: {
+        courseId: this.courseId,
         studentId: studentId,
-        lessonId: this.prerequisites,
-        status: 'completed'
+        status: 'approved',
+        isActive: true
+      },
+      attributes: {
+        exclude: ['rejectionReason'] // ⚠️ IMPORTANT: Exclude field that doesn't exist in DB (see IMPORTANT_NOTES.md)
       }
     });
     
-    return completedPrereqs === this.prerequisites.length;
+    if (!enrollment) return false;
+    
+    // Check prerequisites
+    if (this.prerequisites && Array.isArray(this.prerequisites) && this.prerequisites.length > 0) {
+      const LessonProgress = require('./LessonProgress');
+      const completedPrereqs = await LessonProgress.count({
+        where: {
+          studentId: studentId,
+          lessonId: this.prerequisites,
+          status: 'completed'
+        }
+      });
+      
+      return completedPrereqs === this.prerequisites.length;
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Error in isAccessibleToStudent:', error);
+    // Default to false on error for security
+    return false;
   }
-  
-  return true;
 };
 
 Lesson.prototype.getStudentProgress = async function(studentId) {
-  const LessonProgress = require('./LessonProgress');
-  return await LessonProgress.findOne({
-    where: {
-      lessonId: this.id,
-      studentId: studentId
-    }
-  });
+  try {
+    const LessonProgress = require('./LessonProgress');
+    return await LessonProgress.findOne({
+      where: {
+        lessonId: this.id,
+        studentId: studentId
+      }
+    });
+  } catch (error) {
+    console.error('Error in getStudentProgress:', error);
+    // Return null on error
+    return null;
+  }
 };
 
 // Class methods

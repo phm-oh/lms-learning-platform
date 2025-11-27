@@ -22,6 +22,7 @@ const {
   getNewsCategories,
   
   // Admin/Author routes
+  getAdminNews,
   createNews,
   updateNews,
   deleteNews,
@@ -130,6 +131,15 @@ router.patch('/:id/publish',
   validateParams(paramSchemas.newsId),
   validate(newsSchemas.publishAction),
   togglePublishNews
+);
+
+// @desc    Get all news for admin management (includes draft, scheduled)
+// @route   GET /api/news/admin/all
+// @access  Admin/Teacher
+router.get('/admin/all',
+  isTeacherOrAdmin,
+  validateQuery(querySchemas.newsList),
+  getAdminNews
 );
 
 // ========================================

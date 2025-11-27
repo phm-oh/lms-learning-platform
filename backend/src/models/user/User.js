@@ -93,7 +93,13 @@ const User = sequelize.define('User', {
   hooks: {
     beforeCreate: async (user) => {
       if (user.password) {
-        user.password = await bcrypt.hash(user.password, 10);
+        // Only hash if password is not already hashed (check if it starts with $2a$ or $2b$)
+        if (!user.password.startsWith('$2a$') && !user.password.startsWith('$2b$')) {
+          user.password = await bcrypt.hash(user.password, 10);
+          console.log('Password hashed in beforeCreate hook');
+        } else {
+          console.log('Password already hashed, skipping hash');
+        }
       }
     },
     beforeUpdate: async (user) => {

@@ -3,7 +3,7 @@
 
 const { Course, User, Enrollment, Lesson, Quiz, CourseCategory } = require('../models');
 const { AppError, catchAsync } = require('../middleware/errorHandler');
-const { sendEmail } = require('../utils/emailService');
+const { emailService } = require('../utils/emailService');
 const { 
   processImage, 
   generateUniqueFileName, 
@@ -13,7 +13,8 @@ const {
   validateFile,
   FILE_TYPE_CONFIGS
 } = require('../utils/fileHelper');
-const { Op } = require('sequelize');
+const { Op, literal, Sequelize } = require('sequelize');
+const sequelize = require('../config/database').sequelize;
 
 // ========================================
 // COURSE CRUD OPERATIONS
@@ -225,6 +226,8 @@ const getCourse = catchAsync(async (req, res, next) => {
 // @route   POST /api/courses
 // @access  Teacher/Admin
 const createCourse = catchAsync(async (req, res, next) => {
+  console.log('📝 Creating course with data:', JSON.stringify(req.body, null, 2));
+  
   const {
     title,
     description,
@@ -239,19 +242,22 @@ const createCourse = catchAsync(async (req, res, next) => {
   } = req.body;
   
   try {
-    // Generate unique course code
-    const courseCode = `COURSE_${Date.now()}_${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+    // Generate unique course code (max 20 chars)
+    // Format: C + timestamp (last 10 digits) + random (3 chars) = 14 chars
+    const timestamp = Date.now().toString().slice(-10); // Last 10 digits
+    const random = Math.random().toString(36).substr(2, 3).toUpperCase(); // 3 chars
+    const courseCode = `C${timestamp}${random}`; // Total: 14 chars (within 20 limit)
     
     const course = await Course.create({
       title,
-      description,
-      shortDescription,
-      categoryId,
+      description: description || null,
+      shortDescription: shortDescription || null,
+      categoryId: categoryId || null,
       teacherId: req.user.id,
       courseCode,
       difficultyLevel: difficultyLevel || 1,
-      estimatedDuration,
-      maxStudents,
+      estimatedDuration: estimatedDuration || null,
+      maxStudents: maxStudents || null,
       tags: tags || [],
       prerequisites: prerequisites || [],
       learningObjectives: learningObjectives || [],
@@ -275,32 +281,11 @@ const createCourse = catchAsync(async (req, res, next) => {
       ]
     });
     
-    // 📧 SEND COURSE CREATION CONFIRMATION EMAIL
-    try {
-      await sendEmail({
-        to: req.user.email,
-        subject: '🎯 คอร์สใหม่ของคุณถูกสร้างแล้ว!',
-        template: 'course-created',
-        data: {
-          teacherName: `${req.user.firstName} ${req.user.lastName}`,
-          courseTitle: title,
-          courseCode: courseCode,
-          createdDate: new Date().toLocaleDateString('th-TH'),
-          courseUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/teacher/courses/${course.id}`,
-          dashboardUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/teacher/dashboard`,
-          nextSteps: [
-            'เพิ่มรูปปกคอร์ส',
-            'เพิ่มบทเรียนและเนื้อหา',
-            'สร้างแบบทดสอบ',
-            'ตั้งค่าการเผยแพร่คอร์ส'
-          ]
-        }
-      });
-
-      console.log(`✅ Course creation email sent to teacher: ${req.user.email}`);
-    } catch (emailError) {
-      console.error('❌ Failed to send course creation email:', emailError.message);
-    }
+    // 📧 SEND COURSE CREATION CONFIRMATION EMAIL (non-blocking)
+    // Don't fail course creation if email fails
+    // Note: emailService doesn't have a generic sendEmail method, so we'll skip email for now
+    // TODO: Add course creation email template to emailService if needed
+    console.log(`📧 Course created: ${title} by ${req.user.email} (email notification skipped)`);
 
     res.status(201).json({
       success: true,
@@ -311,7 +296,29 @@ const createCourse = catchAsync(async (req, res, next) => {
     });
     
   } catch (error) {
-    return next(new AppError('Error creating course', 500));
+    console.error('❌ Error creating course:', error);
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+      body: req.body,
+      userId: req.user?.id
+    });
+    
+    // Handle specific Sequelize errors
+    if (error.name === 'SequelizeValidationError') {
+      return next(new AppError(`Validation error: ${error.errors.map(e => e.message).join(', ')}`, 400));
+    }
+    
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      return next(new AppError('Course code already exists', 409));
+    }
+    
+    if (error.name === 'SequelizeForeignKeyConstraintError') {
+      return next(new AppError('Invalid category or teacher ID', 400));
+    }
+    
+    return next(new AppError(`Error creating course: ${error.message}`, 500));
   }
 });
 
@@ -1139,6 +1146,258 @@ const updateEnrollmentStatus = catchAsync(async (req, res, next) => {
   }
 });
 
+// @desc    Get my enrollments (Student)
+// @route   GET /api/enrollments/my
+// @access  Student
+const getMyEnrollments = catchAsync(async (req, res, next) => {
+  if (req.user.role !== 'student') {
+    return next(new AppError('Only students can view their enrollments', 403));
+  }
+
+  try {
+    console.log('🔍 Fetching enrollments for student:', req.user.id);
+    console.log('   Student ID type:', typeof req.user.id);
+    
+    // Try simplest query first to isolate the issue
+    // Exclude rejectionReason field since it doesn't exist in database yet
+    let enrollments;
+    try {
+      enrollments = await Enrollment.findAll({
+        where: { studentId: req.user.id },
+        attributes: {
+          exclude: ['rejectionReason'] // Exclude field that doesn't exist in DB
+        }
+      });
+      console.log('✅ Basic query successful, found:', enrollments.length, 'enrollments');
+    } catch (queryError) {
+      console.error('❌ Basic query failed:', queryError);
+      console.error('   Error name:', queryError.name);
+      console.error('   Error message:', queryError.message);
+      throw queryError;
+    }
+    
+    // Now try with includes
+    try {
+      enrollments = await Enrollment.findAll({
+        where: { studentId: req.user.id },
+        attributes: {
+          exclude: ['rejectionReason'] // Exclude field that doesn't exist in DB
+        },
+        include: [
+          {
+            model: Course,
+            as: 'course',
+            required: false,
+            include: [
+              {
+                model: User,
+                as: 'teacher',
+                required: false,
+                attributes: ['id', 'firstName', 'lastName', 'email']
+              },
+              {
+                model: CourseCategory,
+                as: 'category',
+                required: false,
+                attributes: ['id', 'name', 'color', 'icon']
+              }
+            ],
+            attributes: [
+              'id', 'title', 'description', 'thumbnail', 'difficultyLevel',
+              'estimatedDuration', 'courseCode', 'isPublished', 'isActive'
+            ]
+          }
+        ]
+      });
+      console.log('✅ Query with includes successful, found:', enrollments.length, 'enrollments');
+    } catch (includeError) {
+      console.error('❌ Query with includes failed:', includeError);
+      console.error('   Error name:', includeError.name);
+      console.error('   Error message:', includeError.message);
+      if (includeError.sql) {
+        console.error('   SQL:', includeError.sql);
+      }
+      // Continue with basic query results if includes fail
+      console.log('⚠️  Using basic query results without includes');
+    }
+
+    // Map enrollments and calculate enrollment count for each course
+    console.log('🔄 Processing enrollments data...');
+    const enrollmentsData = await Promise.all(
+      enrollments.map(async (enrollment) => {
+        try {
+          let enrollmentCount = 0;
+          let courseData = null;
+          
+          if (enrollment.course) {
+            try {
+              // Get enrollment count directly
+              enrollmentCount = await Enrollment.count({
+                where: { 
+                  courseId: enrollment.courseId,
+                  status: 'approved' 
+                }
+              });
+              
+              // Build course data object
+              const coursePlain = enrollment.course.get ? enrollment.course.get({ plain: true }) : enrollment.course;
+              
+              courseData = {
+                ...coursePlain,
+                enrollmentCount
+              };
+            } catch (err) {
+              console.error('❌ Error processing course data for enrollment:', err);
+              console.error('   Enrollment ID:', enrollment.id);
+              console.error('   Course ID:', enrollment.courseId);
+              // Fallback: use plain object if available
+              courseData = enrollment.course ? (enrollment.course.get ? enrollment.course.get({ plain: true }) : enrollment.course) : null;
+            }
+          }
+          
+          return {
+            id: enrollment.id,
+            courseId: enrollment.courseId,
+            status: enrollment.status,
+            enrolledAt: enrollment.enrolledAt,
+            approvedAt: enrollment.approvedAt || null,
+            rejectionReason: null, // Field doesn't exist in DB yet, set to null
+            completionPercentage: enrollment.completionPercentage ? parseFloat(enrollment.completionPercentage) : 0,
+            finalGrade: enrollment.finalGrade ? parseFloat(enrollment.finalGrade) : null,
+            course: courseData
+          };
+        } catch (err) {
+          console.error('❌ Error processing enrollment:', err);
+          console.error('   Enrollment:', enrollment.id);
+          // Return minimal data if processing fails
+          return {
+            id: enrollment.id,
+            courseId: enrollment.courseId,
+            status: enrollment.status,
+            enrolledAt: enrollment.enrolledAt,
+            approvedAt: enrollment.approvedAt || null,
+            rejectionReason: null, // Field doesn't exist in DB yet
+            completionPercentage: 0,
+            finalGrade: null,
+            course: null
+          };
+        }
+      })
+    );
+    
+    console.log('✅ Processed enrollments:', enrollmentsData.length);
+
+    // Return empty array if no enrollments found (not an error)
+    console.log('✅ Sending response with', enrollmentsData.length, 'enrollments');
+    res.status(200).json({
+      success: true,
+      data: {
+        enrollments: enrollmentsData || []
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error fetching my enrollments:', error);
+    console.error('   Error name:', error.name);
+    console.error('   Error message:', error.message);
+    console.error('   Error stack:', error.stack);
+    
+    // Log more details for Sequelize errors
+    if (error.name === 'SequelizeDatabaseError') {
+      console.error('   SQL:', error.sql);
+      console.error('   Parameters:', error.parameters);
+    }
+    
+    return next(new AppError(`Error fetching enrollments: ${error.message}`, 500));
+  }
+});
+
+// @desc    Get courses taught by the current teacher
+// @route   GET /api/courses/my-teaching
+// @access  Teacher/Admin
+const getMyTeachingCourses = catchAsync(async (req, res, next) => {
+  const teacherId = req.user.id;
+  const { page = 1, limit = 20, status, search } = req.query;
+
+  const offset = (page - 1) * limit;
+  const where = { teacherId };
+
+  if (status === 'published') {
+    where.isPublished = true;
+  } else if (status === 'draft') {
+    where.isPublished = false;
+  }
+
+  if (search) {
+    where[Op.or] = [
+      { title: { [Op.iLike]: `%${search}%` } },
+      { description: { [Op.iLike]: `%${search}%` } }
+    ];
+  }
+
+  try {
+    const courses = await Course.findAndCountAll({
+      where,
+      offset,
+      limit: parseInt(limit),
+      order: [['created_at', 'DESC']],
+      include: [
+        { model: CourseCategory, as: 'category', attributes: ['id', 'name', 'color'] },
+        { model: User, as: 'teacher', attributes: ['id', 'firstName', 'lastName', 'email'] }
+      ],
+      distinct: true
+    });
+
+    // Fetch counts for lessons, quizzes, and enrollments
+    const courseIds = courses.rows.map(c => c.id);
+
+    const [lessonCounts, quizCounts, enrollmentCounts] = await Promise.all([
+      Lesson.findAll({
+        where: { courseId: { [Op.in]: courseIds } },
+        attributes: ['courseId', [Sequelize.fn('COUNT', Sequelize.col('id')), 'count']],
+        group: ['courseId'], raw: true
+      }).catch(() => []),
+      Quiz.findAll({
+        where: { courseId: { [Op.in]: courseIds } },
+        attributes: ['courseId', [Sequelize.fn('COUNT', Sequelize.col('id')), 'count']],
+        group: ['courseId'], raw: true
+      }).catch(() => []),
+      Enrollment.findAll({
+        where: { courseId: { [Op.in]: courseIds }, status: 'approved' },
+        attributes: ['courseId', [Sequelize.fn('COUNT', Sequelize.col('id')), 'count']],
+        group: ['courseId'], raw: true
+      }).catch(() => [])
+    ]);
+
+    const lessonMap = lessonCounts.reduce((acc, item) => ({ ...acc, [item.courseId]: parseInt(item.count) }), {});
+    const quizMap = quizCounts.reduce((acc, item) => ({ ...acc, [item.courseId]: parseInt(item.count) }), {});
+    const enrollmentMap = enrollmentCounts.reduce((acc, item) => ({ ...acc, [item.courseId]: parseInt(item.count) }), {});
+
+    const coursesWithStats = courses.rows.map(course => ({
+      ...course.toJSON(),
+      lessonCount: lessonMap[course.id] || 0,
+      quizCount: quizMap[course.id] || 0,
+      enrollmentCount: enrollmentMap[course.id] || 0
+    }));
+
+    res.status(200).json({
+      success: true,
+      data: {
+        courses: coursesWithStats,
+        pagination: {
+          total: courses.count,
+          page: parseInt(page),
+          limit: parseInt(limit),
+          pages: Math.ceil(courses.count / limit)
+        }
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error fetching my teaching courses:', error);
+    return next(new AppError(`Error fetching courses: ${error.message}`, 500));
+  }
+});
+
 module.exports = {
   getAllCourses,
   getCourse,
@@ -1150,5 +1409,7 @@ module.exports = {
   togglePublishCourse,
   requestEnrollment,
   getCourseStudents,
-  updateEnrollmentStatus
+  updateEnrollmentStatus,
+  getMyEnrollments,
+  getMyTeachingCourses
 };

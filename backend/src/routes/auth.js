@@ -34,6 +34,7 @@ const {
 // User registration
 router.post('/register', 
   authLimiter,
+  validate(userSchemas.register),
   register
 );
 

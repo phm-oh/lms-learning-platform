@@ -3,7 +3,8 @@
 
 const { Op } = require('sequelize');
 const { AppError , catchAsync} = require('../middleware/errorHandler');
-
+const sequelize = require('../config/database');
+const { Sequelize } = require('sequelize');
 
 // Import models (using kebab-case filenames)
 const News = require('../models/news/news-model');
@@ -79,7 +80,7 @@ const getAllNews = catchAsync(async (req, res, next) => {
       order = [['publishedAt', 'ASC']];
       break;
     case 'popular':
-      order = [['viewCount', 'DESC'], ['likeCount', 'DESC']];
+      order = [[sequelize.col('view_count'), 'DESC'], [sequelize.col('like_count'), 'DESC']];
       break;
     case 'title':
       order = [['title', 'ASC']];
@@ -293,6 +294,126 @@ const getNewsCategories = catchAsync(async (req, res, next) => {
 // ADMIN/AUTHOR ROUTES (Auth required)
 // ========================================
 
+// @desc    Get all news for admin (includes draft, scheduled, archived)
+// @route   GET /api/news/admin/all
+// @access  Admin/Teacher
+const getAdminNews = catchAsync(async (req, res, next) => {
+  const { 
+    page = 1, 
+    limit = 20, 
+    status, 
+    category, 
+    type, 
+    search, 
+    sort = 'latest'
+  } = req.query;
+
+  const offset = (page - 1) * limit;
+  const where = {};
+
+  // Filter by status (admin can see all statuses)
+  if (status && ['draft', 'published', 'scheduled', 'archived'].includes(status)) {
+    where.status = status;
+  }
+
+  // Filter by category
+  if (category) {
+    const categoryRecord = await NewsCategory.findBySlug(category);
+    if (categoryRecord) {
+      where.categoryId = categoryRecord.id;
+    }
+  }
+
+  // Filter by type
+  if (type && ['announcement', 'technology', 'course_update', 'system', 'event', 'general'].includes(type)) {
+    where.newsType = type;
+  }
+
+  // Search
+  if (search) {
+    where[Op.or] = [
+      { title: { [Op.iLike]: `%${search}%` } },
+      { summary: { [Op.iLike]: `%${search}%` } },
+      { content: { [Op.iLike]: `%${search}%` } }
+    ];
+  }
+
+  // Sorting
+  let order;
+  switch (sort) {
+    case 'latest':
+      order = [['created_at', 'DESC']];
+      break;
+    case 'oldest':
+      order = [['created_at', 'ASC']];
+      break;
+    case 'title':
+      order = [['title', 'ASC']];
+      break;
+    case 'popular':
+      order = [['view_count', 'DESC'], ['like_count', 'DESC']];
+      break;
+    default:
+      order = [['created_at', 'DESC']];
+  }
+
+  try {
+    const result = await News.findAndCountAll({
+      where,
+      limit: parseInt(limit),
+      offset,
+      order,
+      include: [
+        {
+          model: NewsCategory,
+          as: 'category',
+          attributes: ['id', 'name', 'slug', 'color']
+        },
+        {
+          model: User,
+          as: 'author',
+          attributes: ['id', 'firstName', 'lastName', 'email']
+        }
+      ]
+    });
+
+    // Get summary statistics
+    const totalNews = await News.count();
+    const publishedNews = await News.count({ where: { status: 'published' } });
+    const draftNews = await News.count({ where: { status: 'draft' } });
+    const scheduledNews = await News.count({ where: { status: 'scheduled' } });
+    const totalViews = await News.sum('viewCount') || 0;
+
+    res.status(200).json({
+      success: true,
+      data: {
+        news: result.rows,
+        pagination: {
+          total: result.count,
+          totalNews: result.count,
+          page: parseInt(page),
+          currentPage: parseInt(page),
+          limit: parseInt(limit),
+          pages: Math.ceil(result.count / limit),
+          totalPages: Math.ceil(result.count / limit),
+          hasNext: parseInt(page) < Math.ceil(result.count / limit),
+          hasPrev: parseInt(page) > 1
+        },
+        summary: {
+          total: totalNews,
+          published: publishedNews,
+          draft: draftNews,
+          scheduled: scheduledNews,
+          totalViews: totalViews
+        }
+      }
+    });
+
+  } catch (error) {
+    return next(new AppError('Error fetching news', 500));
+  }
+});
+
 // @desc    Create news
 // @route   POST /api/news
 // @access  Admin/Teacher
@@ -303,12 +424,14 @@ const createNews = catchAsync(async (req, res, next) => {
       authorId: req.user.id
     };
 
-    // Validate category exists
-    if (newsData.categoryId) {
-      const category = await NewsCategory.findByPk(newsData.categoryId);
-      if (!category) {
-        return next(new AppError('Invalid category', 400));
-      }
+    // Validate category exists (required)
+    if (!newsData.categoryId) {
+      return next(new AppError('Category is required', 400));
+    }
+    
+    const category = await NewsCategory.findByPk(newsData.categoryId);
+    if (!category) {
+      return next(new AppError('Invalid category', 400));
     }
 
     // Validate publication data
@@ -338,10 +461,21 @@ const createNews = catchAsync(async (req, res, next) => {
     });
 
   } catch (error) {
+    console.error('Create news error:', error);
+    console.error('Error stack:', error.stack);
+    console.error('Request body:', req.body);
+    
     if (error.name === 'SequelizeUniqueConstraintError') {
       return next(new AppError('News with this slug already exists', 400));
     }
-    return next(new AppError('Error creating news', 500));
+    if (error.name === 'SequelizeValidationError') {
+      const messages = error.errors.map(e => `${e.path}: ${e.message}`).join(', ');
+      return next(new AppError(`Validation error: ${messages}`, 400));
+    }
+    if (error.name === 'SequelizeDatabaseError') {
+      return next(new AppError(`Database error: ${error.message}`, 500));
+    }
+    return next(new AppError(`Error creating news: ${error.message}`, 500));
   }
 });
 
@@ -705,6 +839,7 @@ module.exports = {
   getNewsCategories,
   
   // Admin/Author routes
+  getAdminNews,
   createNews,
   updateNews,
   deleteNews,

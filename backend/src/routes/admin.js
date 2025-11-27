@@ -253,6 +253,27 @@ router.put('/users/:id/approve', safeAdminHandler('approveUser', (req) => {
   };
 }));
 
+// Update user details (admin only)
+router.put('/users/:id', safeAdminHandler('updateUser', (req) => {
+  const { firstName, lastName, email, phone, dateOfBirth, bio, role, status } = req.body;
+  
+  return {
+    user: {
+      id: parseInt(req.params.id),
+      email: email || 'user@example.com',
+      firstName: firstName || 'นาย',
+      lastName: lastName || 'สมศักดิ์',
+      role: role || 'student',
+      status: status || 'active',
+      phone: phone || '0812345678',
+      dateOfBirth: dateOfBirth || '1995-05-15',
+      bio: bio || null,
+      updatedAt: new Date()
+    },
+    message: 'อัปเดตข้อมูลผู้ใช้สำเร็จ'
+  };
+}));
+
 // Update user status (suspend/ban/activate)
 router.put('/users/:id/status', safeAdminHandler('updateUserStatus', (req) => {
   const { status, reason, duration } = req.body;

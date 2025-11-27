@@ -39,9 +39,13 @@ const {
   requestEnrollment,
   getCourseStudents,
   updateEnrollmentStatus,
+  getMyEnrollments,
   uploadCourseThumbnail,
-  deleteCourseThumbnail
+  deleteCourseThumbnail,
+  getMyTeachingCourses
 } = require('../controllers/course');
+
+const { getCourseCategories } = require('../controllers/courseCategory');
 
 // Import file upload middleware
 const { uploadCourseThumbnail: uploadThumbnailMiddleware } = require('../middleware/upload');
@@ -52,10 +56,24 @@ const { uploadCourseThumbnail: uploadThumbnailMiddleware } = require('../middlew
 
 router.use(generalLimiter);
 
+// Get course categories (public)
+router.get('/categories',
+  getCourseCategories
+);
+
 // Get all published courses
 router.get('/',
   validateQuery(querySchemas.pagination),
   getAllCourses
+);
+
+// Get my teaching courses (for teachers) - MUST be before /:id route to avoid route conflict
+router.get('/my-teaching',
+  protect,
+  roleBasedLimiter,
+  isTeacherOrAdmin,
+  validateQuery(querySchemas.myTeaching),
+  getMyTeachingCourses
 );
 
 // Get single course details
@@ -90,14 +108,7 @@ router.get('/:id',
 );
 
 // ========================================
-// AUTHENTICATION REQUIRED ROUTES
-// ========================================
-
-router.use(protect);
-router.use(roleBasedLimiter);
-
-// ========================================
-// COURSE MANAGEMENT (Teachers/Admin)
+// COURSE MANAGEMENT (Teachers/Admin) - continued
 // ========================================
 
 // Create new course

@@ -20,7 +20,8 @@ const {
   togglePublishQuiz,
   startQuizAttempt,
   submitQuizAnswer,
-  submitQuiz
+  submitQuiz,
+  getQuizResults
 } = require('../controllers/quiz');
 
 // Helper function for safe routing (for unimplemented features)
@@ -94,6 +95,8 @@ router.post('/',
     randomizeQuestions: Joi.boolean().default(false),
     showCorrectAnswers: Joi.boolean().default(true),
     showResultsImmediately: Joi.boolean().default(true),
+    isActive: Joi.boolean().default(true),
+    allowRetake: Joi.boolean().default(true),
     availableFrom: Joi.date().optional(),
     availableUntil: Joi.date().greater(Joi.ref('availableFrom')).optional(),
     questions: Joi.array().items(
@@ -123,6 +126,8 @@ router.put('/:id',
     randomizeQuestions: Joi.boolean().optional(),
     showCorrectAnswers: Joi.boolean().optional(),
     showResultsImmediately: Joi.boolean().optional(),
+    isActive: Joi.boolean().optional(),
+    allowRetake: Joi.boolean().optional(),
     availableFrom: Joi.date().optional(),
     availableUntil: Joi.date().optional(),
     isPublished: Joi.boolean().optional()
@@ -181,57 +186,10 @@ router.post('/:id/submit',
 );
 
 // Get quiz results
-// Note: This is not explicitly in the controller exports I saw, 
-// but usually handled by getQuiz with attempt history or a specific endpoint.
-// Since I didn't implement getQuizResults in controller, I'll keep this as mock or redirect to getQuiz?
-// Actually getQuiz returns studentProgress which has attempts.
-// But a dedicated results view might be needed.
-// I'll keep the mock for now as I didn't implement `getQuizResults` in controller.
 router.get('/:id/results',
+  protect,
   validateParams(paramSchemas.id),
-  (req, res) => {
-    const canViewResults = req.user.role !== 'student' || req.query.attemptId;
-
-    if (!canViewResults) {
-      return res.status(403).json({
-        success: false,
-        error: 'Students can only view their own quiz results'
-      });
-    }
-
-    res.json({
-      success: true,
-      data: {
-        results: [
-          {
-            id: 1,
-            attemptNumber: 1,
-            studentId: req.user.id,
-            student: req.user.role === 'student' ? undefined : {
-              firstName: 'Mock',
-              lastName: 'Student',
-              email: 'student@mock.com'
-            },
-            score: 85,
-            maxScore: 100,
-            percentage: 85,
-            timeSpent: 1200,
-            submittedAt: new Date(),
-            isCompleted: true,
-            answers: req.user.role === 'student' ? undefined : {
-              '1': { answer: '4', isCorrect: true, points: 10 }
-            }
-          }
-        ],
-        quiz: {
-          title: 'Mock Quiz Results',
-          passingScore: 70,
-          showCorrectAnswers: true
-        },
-        message: 'Mock quiz results - Feature not fully implemented'
-      }
-    });
-  }
+  getQuizResults
 );
 
 // ========================================

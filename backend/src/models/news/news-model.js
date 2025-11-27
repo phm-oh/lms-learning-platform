@@ -26,7 +26,14 @@ const News = sequelize.define('News', {
     unique: true,
     validate: {
       isLowercase: true,
-      is: /^[a-z0-9-]+$/
+      // Use custom validator to check pattern
+      is: {
+        args: /^[a-z0-9-]+$/,
+        msg: 'Slug can only contain lowercase letters, numbers, and hyphens'
+      },
+      notEmpty: {
+        msg: 'Slug cannot be empty'
+      }
     }
   },
   summary: {
@@ -174,13 +181,25 @@ const News = sequelize.define('News', {
   // Hooks
   hooks: {
     beforeValidate: (news, options) => {
-      // Auto-generate slug from title if not provided
-      if (!news.slug && news.title) {
-        news.slug = slugify(news.title, {
-          lower: true,
-          strict: true,
-          remove: /[*+~.()'"!:@]/g
-        });
+      // Auto-generate slug from title if not provided or invalid
+      if (!news.slug || news.slug.trim() === '' || !/^[a-z0-9-]+$/.test(news.slug)) {
+        if (news.title) {
+          let generatedSlug = slugify(news.title, {
+            lower: true,
+            strict: true,
+            remove: /[*+~.()'"!:@]/g,
+            locale: 'th' // Support Thai characters
+          });
+          
+          // If slugify returns empty or invalid (e.g., for Thai-only text), use timestamp
+          if (!generatedSlug || generatedSlug.trim() === '' || !/^[a-z0-9-]+$/.test(generatedSlug)) {
+            generatedSlug = `news-${Date.now()}`;
+          }
+          
+          news.slug = generatedSlug;
+        } else {
+          news.slug = `news-${Date.now()}`;
+        }
       }
       
       // Auto-generate meta title if not provided
@@ -202,6 +221,28 @@ const News = sequelize.define('News', {
     },
     
     beforeCreate: async (news, options) => {
+      // Ensure slug exists and is valid
+      if (!news.slug || news.slug.trim() === '' || !/^[a-z0-9-]+$/.test(news.slug)) {
+        // Generate slug from title or use timestamp
+        if (news.title) {
+          let generatedSlug = slugify(news.title, {
+            lower: true,
+            strict: true,
+            remove: /[*+~.()'"!:@]/g,
+            locale: 'th'
+          });
+          
+          // If slugify returns empty (e.g., for Thai-only text), use timestamp
+          if (!generatedSlug || generatedSlug.trim() === '' || !/^[a-z0-9-]+$/.test(generatedSlug)) {
+            generatedSlug = `news-${Date.now()}`;
+          }
+          
+          news.slug = generatedSlug;
+        } else {
+          news.slug = `news-${Date.now()}`;
+        }
+      }
+      
       // Ensure unique slug
       await news.ensureUniqueSlug();
       

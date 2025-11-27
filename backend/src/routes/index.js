@@ -8,6 +8,7 @@ const router = express.Router();
 const authRoutes = require('./auth');
 const adminRoutes = require('./admin');
 const courseRoutes = require('./course');
+const enrollmentRoutes = require('./enrollment');
 const lessonRoutes = require('./lesson');
 const quizRoutes = require('./quiz');
 const analyticsRoutes = require('./analytics');
@@ -152,6 +153,9 @@ router.use('/admin', adminRoutes);
 
 // Course management routes
 router.use('/courses', courseRoutes);
+
+// Enrollment routes
+router.use('/enrollments', enrollmentRoutes);
 
 // Lesson management routes
 router.use('/lessons', lessonRoutes);

@@ -84,7 +84,7 @@ router.get('/:id',
 router.post('/',
   contentCreationLimiter,
   isTeacherOrAdmin,
-  validate({
+  validate(Joi.object({
     courseId: Joi.number().integer().positive().required(),
     title: Joi.string().min(3).max(255).required(),
     description: Joi.string().max(1000).optional().allow(''),
@@ -96,7 +96,7 @@ router.post('/',
     estimatedTime: Joi.number().integer().positive().optional(),
     isRequired: Joi.boolean().optional(),
     prerequisites: Joi.array().items(Joi.number().integer().positive()).optional()
-  }),
+  })),
   createLesson
 );
 
@@ -104,7 +104,7 @@ router.post('/',
 router.put('/:id',
   validateParams(paramSchemas.id),
   isTeacherOrAdmin,
-  validate({
+  validate(Joi.object({
     title: Joi.string().min(3).max(255).optional(),
     description: Joi.string().max(1000).optional().allow(''),
     content: Joi.string().optional().allow(''),
@@ -115,7 +115,7 @@ router.put('/:id',
     estimatedTime: Joi.number().integer().positive().optional(),
     isRequired: Joi.boolean().optional(),
     prerequisites: Joi.array().items(Joi.number().integer().positive()).optional()
-  }),
+  })),
   updateLesson
 );
 
@@ -130,9 +130,9 @@ router.delete('/:id',
 router.patch('/:id/publish',
   validateParams(paramSchemas.id),
   isTeacherOrAdmin,
-  validate({
+  validate(Joi.object({
     status: Joi.string().valid('published', 'draft', 'archived').required()
-  }),
+  })),
   togglePublishLesson
 );
 
@@ -178,12 +178,12 @@ router.delete('/:id/attachments',
 router.post('/:id/progress',
   validateParams(paramSchemas.id),
   isStudent,
-  validate({
+  validate(Joi.object({
     timeSpent: Joi.number().integer().min(0).optional(),
     completionPercentage: Joi.number().min(0).max(100).optional(),
     notes: Joi.string().max(1000).optional().allow(''),
     status: Joi.string().valid('not_started', 'in_progress', 'completed').optional()
-  }),
+  })),
   updateLessonProgress
 );
 
@@ -191,9 +191,9 @@ router.post('/:id/progress',
 router.post('/:id/complete',
   validateParams(paramSchemas.id),
   isStudent,
-  validate({
+  validate(Joi.object({
     timeSpent: Joi.number().integer().min(0).optional()
-  }),
+  })),
   markLessonComplete
 );
 

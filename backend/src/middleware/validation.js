@@ -27,6 +27,13 @@ const userSchemas = {
         'string.max': 'Password cannot exceed 50 characters',
         'any.required': 'Password is required'
       }),
+    confirmPassword: Joi.string()
+      .valid(Joi.ref('password'))
+      .required()
+      .messages({
+        'any.only': 'รหัสผ่านไม่ตรงกัน',
+        'any.required': 'กรุณายืนยันรหัสผ่าน'
+      }),
     firstName: Joi.string()
       .min(2)
       .max(50)
@@ -54,6 +61,7 @@ const userSchemas = {
     phone: Joi.string()
       .pattern(/^\+?[\d\s\-()]+$/)
       .optional()
+      .allow('')
       .messages({
         'string.pattern.base': 'Please provide a valid phone number'
       }),
@@ -147,11 +155,10 @@ const courseSchemas = {
     categoryId: Joi.number()
       .integer()
       .positive()
-      .required()
+      .optional()
       .messages({
         'number.base': 'Category ID must be a number',
-        'number.positive': 'Category ID must be positive',
-        'any.required': 'Category is required'
+        'number.positive': 'Category ID must be positive'
       }),
     difficultyLevel: Joi.number()
       .integer()
@@ -184,18 +191,20 @@ const courseSchemas = {
         'array.max': 'Maximum 10 tags allowed'
       }),
     prerequisites: Joi.array()
-      .items(Joi.string().max(100))
+      .items(Joi.string().max(200)) // เพิ่มเป็น 200 ตัวอักษรต่อข้อ
       .max(5)
       .optional()
       .messages({
-        'array.max': 'Maximum 5 prerequisites allowed'
+        'array.max': 'Maximum 5 prerequisites allowed',
+        'string.max': 'Prerequisite must not exceed 200 characters'
       }),
     learningObjectives: Joi.array()
-      .items(Joi.string().max(200))
+      .items(Joi.string().max(500)) // เพิ่มเป็น 500 ตัวอักษรต่อข้อ
       .max(10)
       .optional()
       .messages({
-        'array.max': 'Maximum 10 learning objectives allowed'
+        'array.max': 'Maximum 10 learning objectives allowed',
+        'string.max': 'Learning objective must not exceed 500 characters'
       })
   }),
 
@@ -236,13 +245,21 @@ const courseSchemas = {
       .max(10)
       .optional(),
     prerequisites: Joi.array()
-      .items(Joi.string().max(100))
+      .items(Joi.string().max(200)) // เพิ่มเป็น 200 ตัวอักษรต่อข้อ
       .max(5)
-      .optional(),
+      .optional()
+      .messages({
+        'array.max': 'Maximum 5 prerequisites allowed',
+        'string.max': 'Prerequisite must not exceed 200 characters'
+      }),
     learningObjectives: Joi.array()
-      .items(Joi.string().max(200))
+      .items(Joi.string().max(500)) // เพิ่มเป็น 500 ตัวอักษรต่อข้อ
       .max(10)
       .optional()
+      .messages({
+        'array.max': 'Maximum 10 learning objectives allowed',
+        'string.max': 'Learning objective must not exceed 500 characters'
+      })
   })
 };
 
@@ -328,6 +345,12 @@ const quizSchemas = {
       .default(true),
     showResultsImmediately: Joi.boolean()
       .default(true),
+    isActive: Joi.boolean()
+      .default(true)
+      .description('เปิด/ปิดการทำแบบทดสอบ (แยกจาก isPublished)'),
+    allowRetake: Joi.boolean()
+      .default(true)
+      .description('อนุญาตให้ทำซ้ำได้หรือไม่ (ถ้า false แม้จะยังไม่ถึง maxAttempts ก็ทำซ้ำไม่ได้)'),
     availableFrom: Joi.date()
       .optional(),
     availableUntil: Joi.date()
@@ -345,21 +368,86 @@ const quizSchemas = {
 
 const validate = (schema) => {
   return (req, res, next) => {
+    // Check if schema is a valid Joi schema
+    if (!schema || typeof schema.validate !== 'function') {
+      console.error('❌ Invalid schema provided to validate middleware:', schema);
+      return next(new AppError('Invalid validation schema', 500));
+    }
+
+    // For register schema, we need to keep confirmPassword for validation
+    // but it will be stripped after validation since it's not needed in the database
     const { error, value } = schema.validate(req.body, {
       abortEarly: false, // Get all validation errors
       allowUnknown: false, // Don't allow unknown fields
-      stripUnknown: true // Remove unknown fields
+      stripUnknown: true // Remove unknown fields (confirmPassword will be removed after validation)
     });
 
     if (error) {
-      const errorMessage = error.details
-        .map(detail => detail.message)
-        .join(', ');
+      console.error('❌ Validation error:', error.details);
+      console.error('Request body:', JSON.stringify(req.body, null, 2));
       
-      return next(new AppError(`Validation error: ${errorMessage}`, 400));
+      // Format error messages in Thai for better UX
+      const formattedErrors = error.details.map(detail => {
+        const message = detail.message;
+        const field = detail.path.join('.');
+        
+        // Convert common English messages to Thai
+        if (message.includes('must be equal to') || message.includes('must match') || message.includes('ref:password')) {
+          return {
+            field: 'confirmPassword',
+            message: 'รหัสผ่านไม่ตรงกัน'
+          };
+        }
+        if (message.includes('is required')) {
+          const fieldNames = {
+            'email': 'อีเมล',
+            'password': 'รหัสผ่าน',
+            'confirmPassword': 'ยืนยันรหัสผ่าน',
+            'firstName': 'ชื่อ',
+            'lastName': 'นามสกุล'
+          };
+          return {
+            field: field,
+            message: `${fieldNames[field] || field} จำเป็นต้องกรอก`
+          };
+        }
+        if (message.includes('must be at least')) {
+          return {
+            field: field,
+            message: `${field} ต้องมีอย่างน้อย ${detail.context.limit} ตัวอักษร`
+          };
+        }
+        if (message.includes('must be a valid email') || message.includes('valid email')) {
+          return {
+            field: 'email',
+            message: 'รูปแบบอีเมลไม่ถูกต้อง'
+          };
+        }
+        if (message.includes('must be one of')) {
+          return {
+            field: field,
+            message: `${field} ไม่ถูกต้อง`
+          };
+        }
+        return {
+          field: field,
+          message: message
+        };
+      });
+      
+      // Get the first error message for the main message
+      const firstError = formattedErrors[0];
+      const mainMessage = firstError?.message || 'ข้อมูลไม่ถูกต้อง';
+      
+      return res.status(400).json({
+        success: false,
+        message: mainMessage,
+        errors: formattedErrors
+      });
     }
 
     // Replace req.body with validated and sanitized data
+    // Note: confirmPassword will be stripped here (which is fine, we don't need it after validation)
     req.body = value;
     next();
   };
@@ -368,6 +456,12 @@ const validate = (schema) => {
 // Validate query parameters
 const validateQuery = (schema) => {
   return (req, res, next) => {
+    // Check if schema is a valid Joi schema
+    if (!schema || typeof schema.validate !== 'function') {
+      console.error('❌ Invalid schema provided to validateQuery middleware:', schema);
+      return next(new AppError('Invalid validation schema', 500));
+    }
+
     const { error, value } = schema.validate(req.query, {
       abortEarly: false,
       allowUnknown: true,
@@ -390,6 +484,12 @@ const validateQuery = (schema) => {
 // Validate URL parameters
 const validateParams = (schema) => {
   return (req, res, next) => {
+    // Check if schema is a valid Joi schema
+    if (!schema || typeof schema.validate !== 'function') {
+      console.error('❌ Invalid schema provided to validateParams middleware:', schema);
+      return next(new AppError('Invalid validation schema', 500));
+    }
+
     const { error, value } = schema.validate(req.params, {
       abortEarly: false,
       allowUnknown: false,
@@ -472,13 +572,31 @@ const querySchemas = {
     limit: Joi.number()
       .integer()
       .min(1)
-      .max(100)
+      .max(1000) // เพิ่ม max เป็น 1000
       .default(10),
     sort: Joi.string()
       .optional(),
     order: Joi.string()
       .valid('asc', 'desc')
       .default('desc')
+  }),
+  myTeaching: Joi.object({
+    page: Joi.number()
+      .integer()
+      .min(1)
+      .default(1),
+    limit: Joi.number()
+      .integer()
+      .min(1)
+      .max(1000) // Allow higher limit for teacher's own courses
+      .default(20),
+    status: Joi.string()
+      .valid('published', 'draft', '')
+      .optional()
+      .allow(''),
+    search: Joi.string()
+      .optional()
+      .allow('')
   })
 };
 

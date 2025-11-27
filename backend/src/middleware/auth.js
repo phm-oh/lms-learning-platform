@@ -267,6 +267,9 @@ const isEnrolledOrTeacher = catchAsync(async (req, res, next) => {
         studentId: req.user.id,
         status: 'approved',
         isActive: true
+      },
+      attributes: {
+        exclude: ['rejectionReason'] // Exclude field that doesn't exist in DB
       }
     });
 

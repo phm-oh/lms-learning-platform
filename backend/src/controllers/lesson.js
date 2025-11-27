@@ -25,10 +25,14 @@ const { Op } = require('sequelize');
 // @access  Enrolled students/Teachers/Admin
 const getCourseActions = catchAsync(async (req, res, next) => {
   const { courseId } = req.params;
-  const { includeProgress = false } = req.query;
+  const { includeProgress = 'false' } = req.query;
   
   try {
-    const whereClause = { courseId };
+    console.log('🔍 Fetching lessons for course:', courseId);
+    console.log('   User:', req.user.id, req.user.role);
+    console.log('   Include progress:', includeProgress);
+    
+    const whereClause = { courseId: parseInt(courseId) };
     
     // Students can only see published lessons
     if (req.user.role === 'student') {
@@ -42,30 +46,88 @@ const getCourseActions = catchAsync(async (req, res, next) => {
         {
           model: Course,
           as: 'course',
-          attributes: ['title', 'teacherId']
+          required: false,
+          attributes: ['id', 'title', 'teacherId']
         }
       ]
     });
     
+    console.log('✅ Found lessons:', lessons.length);
+    
     // For students, get their progress and check accessibility
     let lessonsWithProgress = lessons;
     if (req.user.role === 'student' && includeProgress === 'true') {
-      lessonsWithProgress = await Promise.all(lessons.map(async (lesson) => {
-        const isAccessible = await lesson.isAccessibleToStudent(req.user.id);
-        const progress = await lesson.getStudentProgress(req.user.id);
-        
-        return {
-          ...lesson.toJSON(),
-          isAccessible,
-          progress: progress ? {
-            status: progress.status,
-            completionPercentage: progress.completionPercentage,
-            timeSpent: progress.timeSpent,
-            lastAccessed: progress.lastAccessed,
-            completedAt: progress.completedAt
-          } : null
-        };
-      }));
+      console.log('📊 Getting progress for student...');
+      
+      // Check enrollment first
+      const enrollment = await Enrollment.findOne({
+        where: {
+          courseId: parseInt(courseId),
+          studentId: req.user.id,
+          status: 'approved',
+          isActive: true
+        },
+        attributes: {
+          exclude: ['rejectionReason'] // Exclude field that doesn't exist in DB
+        }
+      });
+      
+      if (!enrollment) {
+        console.warn('⚠️ Student not enrolled in course');
+        return next(new AppError('You are not enrolled in this course', 403));
+      }
+      
+      // Get all lesson progress for this student in one query (more efficient)
+      const allProgress = await LessonProgress.findAll({
+        where: {
+          studentId: req.user.id,
+          lessonId: lessons.map(l => l.id)
+        }
+      });
+      
+      const progressMap = new Map(allProgress.map(p => [p.lessonId, p]));
+      
+      // Get completed lesson IDs for prerequisites check
+      const completedLessonIds = allProgress
+        .filter(p => p.status === 'completed')
+        .map(p => p.lessonId);
+      
+      lessonsWithProgress = lessons.map((lesson) => {
+        try {
+          const lessonData = lesson.toJSON();
+          const progress = progressMap.get(lesson.id);
+          
+          // Check accessibility: published + enrolled + prerequisites met
+          let isAccessible = lessonData.status === 'published';
+          
+          if (isAccessible && lessonData.prerequisites && Array.isArray(lessonData.prerequisites) && lessonData.prerequisites.length > 0) {
+            const prereqsMet = lessonData.prerequisites.every(prereqId => completedLessonIds.includes(prereqId));
+            isAccessible = prereqsMet;
+          }
+          
+          return {
+            ...lessonData,
+            isAccessible,
+            progress: progress ? {
+              status: progress.status,
+              completionPercentage: parseFloat(progress.completionPercentage || 0),
+              timeSpent: progress.timeSpent || 0,
+              lastAccessed: progress.lastAccessed,
+              completedAt: progress.completedAt
+            } : null
+          };
+        } catch (err) {
+          console.error('❌ Error processing lesson:', lesson.id, err);
+          return {
+            ...lesson.toJSON(),
+            isAccessible: true,
+            progress: null
+          };
+        }
+      });
+    } else {
+      // For non-students or when progress not requested, just return lessons
+      lessonsWithProgress = lessons.map(lesson => lesson.toJSON());
     }
     
     res.status(200).json({
@@ -77,47 +139,12 @@ const getCourseActions = catchAsync(async (req, res, next) => {
     });
     
   } catch (error) {
-    // Mock data if models don't exist
-    res.status(200).json({
-      success: true,
-      data: {
-        lessons: [
-          {
-            id: 1,
-            title: 'Introduction to the Course',
-            lessonType: 'video',
-            videoUrl: 'https://example.com/video1.mp4',
-            estimatedTime: 30,
-            orderIndex: 1,
-            status: 'published',
-            isRequired: true,
-            isAccessible: true,
-            progress: includeProgress === 'true' ? {
-              status: 'not_started',
-              completionPercentage: 0,
-              timeSpent: 0
-            } : null
-          },
-          {
-            id: 2,
-            title: 'Course Materials',
-            lessonType: 'document',
-            estimatedTime: 15,
-            orderIndex: 2,
-            status: 'published',
-            isRequired: false,
-            isAccessible: true,
-            progress: includeProgress === 'true' ? {
-              status: 'completed',
-              completionPercentage: 100,
-              timeSpent: 900
-            } : null
-          }
-        ],
-        total: 2,
-        message: 'Mock lesson data - Lesson models not available'
-      }
-    });
+    console.error('❌ Error fetching course lessons:', error);
+    console.error('   Error name:', error.name);
+    console.error('   Error message:', error.message);
+    console.error('   Error stack:', error.stack);
+    
+    return next(new AppError(`Error fetching lessons: ${error.message}`, 500));
   }
 });
 

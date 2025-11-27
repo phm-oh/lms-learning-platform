@@ -6,6 +6,8 @@ const {
   Lesson, 
   Quiz, 
   QuizQuestion,
+  Enrollment,
+  LessonProgress,
   sequelize 
 } = require('../../models');
 
@@ -215,56 +217,159 @@ async function seedDatabase() {
         }
       ], { transaction });
       
-      // 4. Create Lessons for the first course
+      // 4. Create Lessons for all courses
       console.log('📝 Creating lessons...');
-      const lessons = await Lesson.bulkCreate([
+      const allLessons = [];
+      
+      // Lessons for Calculus course
+      const calcLessons = await Lesson.bulkCreate([
         {
           courseId: courses[0].id, // Calculus
           title: 'Introduction to Limits',
           description: 'Understanding the concept of limits',
-          content: '<h2>What are Limits?</h2><p>Limits are fundamental to calculus...</p>',
+          content: '<h2>What are Limits?</h2><p>Limits are fundamental to calculus. They describe the behavior of functions as they approach a specific point.</p>',
           lessonType: 'text',
           orderIndex: 1,
           estimatedTime: 45,
-          status: 'published'
+          status: 'published',
+          isRequired: true
         },
         {
           courseId: courses[0].id,
           title: 'Limit Laws and Techniques',
           description: 'Learn various techniques for evaluating limits',
-          content: '<h2>Limit Laws</h2><p>There are several laws that help us evaluate limits...</p>',
+          content: '<h2>Limit Laws</h2><p>There are several laws that help us evaluate limits more easily...</p>',
           lessonType: 'video',
           videoUrl: 'https://www.youtube.com/watch?v=riXcZT2ICjA',
           videoDuration: 1800, // 30 minutes
           orderIndex: 2,
           estimatedTime: 60,
-          status: 'published'
+          status: 'published',
+          isRequired: true
         },
         {
           courseId: courses[0].id,
           title: 'Introduction to Derivatives',
           description: 'The derivative as a limit',
-          content: '<h2>Derivatives</h2><p>The derivative represents the rate of change...</p>',
+          content: '<h2>Derivatives</h2><p>The derivative represents the rate of change of a function...</p>',
           lessonType: 'text',
           orderIndex: 3,
           estimatedTime: 50,
           status: 'published',
-          prerequisites: [1, 2] // Requires lessons 1 and 2
+          isRequired: true
+          // Prerequisites will be set after lessons are created
+        },
+        {
+          courseId: courses[0].id,
+          title: 'Derivative Rules',
+          description: 'Power rule, product rule, quotient rule, and chain rule',
+          content: '<h2>Derivative Rules</h2><p>Learn the essential rules for finding derivatives...</p>',
+          lessonType: 'text',
+          orderIndex: 4,
+          estimatedTime: 60,
+          status: 'published',
+          isRequired: true
+          // Prerequisites will be set after lessons are created
         }
       ], { transaction });
+      allLessons.push(...calcLessons);
+      
+      // Lessons for Web Development course
+      const webLessons = await Lesson.bulkCreate([
+        {
+          courseId: courses[1].id, // Web Development
+          title: 'HTML Basics',
+          description: 'Introduction to HTML structure and elements',
+          content: '<h2>HTML Basics</h2><p>HTML is the foundation of web development...</p>',
+          lessonType: 'text',
+          orderIndex: 1,
+          estimatedTime: 30,
+          status: 'published',
+          isRequired: true
+        },
+        {
+          courseId: courses[1].id,
+          title: 'CSS Styling',
+          description: 'Learn how to style your HTML with CSS',
+          content: '<h2>CSS Styling</h2><p>CSS allows you to make your websites beautiful...</p>',
+          lessonType: 'video',
+          videoUrl: 'https://www.youtube.com/watch?v=1Rs2ND1ryYc',
+          videoDuration: 2400, // 40 minutes
+          orderIndex: 2,
+          estimatedTime: 45,
+          status: 'published',
+          isRequired: true
+          // Prerequisites will be set after lessons are created
+        },
+        {
+          courseId: courses[1].id,
+          title: 'JavaScript Fundamentals',
+          description: 'Introduction to JavaScript programming',
+          content: '<h2>JavaScript Fundamentals</h2><p>JavaScript adds interactivity to your websites...</p>',
+          lessonType: 'text',
+          orderIndex: 3,
+          estimatedTime: 60,
+          status: 'published',
+          isRequired: true
+          // Prerequisites will be set after lessons are created
+        }
+      ], { transaction });
+      allLessons.push(...webLessons);
+      
+      // Lessons for Physics course
+      const physLessons = await Lesson.bulkCreate([
+        {
+          courseId: courses[2].id, // Physics
+          title: 'Motion in One Dimension',
+          description: 'Understanding linear motion',
+          content: '<h2>Motion in One Dimension</h2><p>Learn about position, velocity, and acceleration...</p>',
+          lessonType: 'text',
+          orderIndex: 1,
+          estimatedTime: 50,
+          status: 'published',
+          isRequired: true
+        },
+        {
+          courseId: courses[2].id,
+          title: 'Newton\'s Laws of Motion',
+          description: 'The three fundamental laws of motion',
+          content: '<h2>Newton\'s Laws</h2><p>Understand the principles that govern motion...</p>',
+          lessonType: 'video',
+          videoUrl: 'https://www.youtube.com/watch?v=kKKM8Y-u7ds',
+          videoDuration: 2700, // 45 minutes
+          orderIndex: 2,
+          estimatedTime: 60,
+          status: 'published',
+          isRequired: true
+          // Prerequisites will be set after lessons are created
+        }
+      ], { transaction });
+      allLessons.push(...physLessons);
+      
+      const lessons = allLessons;
+      
+      // Set prerequisites after lessons are created
+      await calcLessons[2].update({ prerequisites: [calcLessons[0].id, calcLessons[1].id] }, { transaction });
+      await calcLessons[3].update({ prerequisites: [calcLessons[2].id] }, { transaction });
+      await webLessons[1].update({ prerequisites: [webLessons[0].id] }, { transaction });
+      await webLessons[2].update({ prerequisites: [webLessons[1].id] }, { transaction });
+      await physLessons[1].update({ prerequisites: [physLessons[0].id] }, { transaction });
       
       // 5. Create a Quiz
       console.log('🧠 Creating quizzes...');
       const quiz = await Quiz.create({
         courseId: courses[0].id,
-        lessonId: lessons[0].id,
+        lessonId: lessons[0].id, // Lesson-level Quiz (ผูกกับ lesson)
         title: 'Limits Quiz',
         description: 'Test your understanding of limits',
         quizType: 'assessment',
         timeLimit: 30, // 30 minutes
         maxAttempts: 2,
         passingScore: 70.00,
-        isPublished: true
+        isPublished: true,
+        availableFrom: new Date(), // Available now
+        availableUntil: null, // No expiry
+        orderIndex: 0 // เรียงลำดับใน lesson (0 = แรกสุด)
       }, { transaction });
       
       // 6. Create Quiz Questions
@@ -304,19 +409,157 @@ async function seedDatabase() {
         }
       ], { transaction });
       
+      // 7. Create Enrollments
+      console.log('📋 Creating enrollments...');
+      const enrollments = await Enrollment.bulkCreate([
+        {
+          courseId: courses[0].id, // Calculus
+          studentId: students[0].id, // Alice
+          status: 'approved',
+          enrolledAt: new Date(),
+          approvedAt: new Date(),
+          approvedBy: admin.id,
+          completionPercentage: 25.00
+        },
+        {
+          courseId: courses[0].id, // Calculus
+          studentId: students[1].id, // Bob
+          status: 'approved',
+          enrolledAt: new Date(),
+          approvedAt: new Date(),
+          approvedBy: admin.id,
+          completionPercentage: 50.00
+        },
+        {
+          courseId: courses[1].id, // Web Development
+          studentId: students[0].id, // Alice
+          status: 'approved',
+          enrolledAt: new Date(),
+          approvedAt: new Date(),
+          approvedBy: admin.id,
+          completionPercentage: 66.67
+        },
+        {
+          courseId: courses[1].id, // Web Development
+          studentId: students[2].id, // Carol
+          status: 'approved',
+          enrolledAt: new Date(),
+          approvedAt: new Date(),
+          approvedBy: admin.id,
+          completionPercentage: 0.00
+        },
+        {
+          courseId: courses[2].id, // Physics
+          studentId: students[1].id, // Bob
+          status: 'approved',
+          enrolledAt: new Date(),
+          approvedAt: new Date(),
+          approvedBy: admin.id,
+          completionPercentage: 0.00
+        }
+      ], { transaction });
+      
+      // 8. Create Lesson Progress
+      console.log('📈 Creating lesson progress...');
+      await LessonProgress.bulkCreate([
+        // Alice's progress in Calculus
+        {
+          lessonId: calcLessons[0].id,
+          studentId: students[0].id,
+          status: 'completed',
+          completionPercentage: 100.00,
+          timeSpent: 2700, // 45 minutes
+          completedAt: new Date()
+        },
+        {
+          lessonId: calcLessons[1].id,
+          studentId: students[0].id,
+          status: 'in_progress',
+          completionPercentage: 50.00,
+          timeSpent: 1800 // 30 minutes
+        },
+        // Bob's progress in Calculus
+        {
+          lessonId: calcLessons[0].id,
+          studentId: students[1].id,
+          status: 'completed',
+          completionPercentage: 100.00,
+          timeSpent: 2400,
+          completedAt: new Date()
+        },
+        {
+          lessonId: calcLessons[1].id,
+          studentId: students[1].id,
+          status: 'completed',
+          completionPercentage: 100.00,
+          timeSpent: 3600,
+          completedAt: new Date()
+        },
+        // Alice's progress in Web Development
+        {
+          lessonId: webLessons[0].id,
+          studentId: students[0].id,
+          status: 'completed',
+          completionPercentage: 100.00,
+          timeSpent: 1800,
+          completedAt: new Date()
+        },
+        {
+          lessonId: webLessons[1].id,
+          studentId: students[0].id,
+          status: 'completed',
+          completionPercentage: 100.00,
+          timeSpent: 2700,
+          completedAt: new Date()
+        },
+        {
+          lessonId: webLessons[2].id,
+          studentId: students[0].id,
+          status: 'in_progress',
+          completionPercentage: 30.00,
+          timeSpent: 1080
+        }
+      ], { transaction });
+      
       console.log('✅ Database seeded successfully!');
       console.log('');
       console.log('🔑 Login credentials:');
-      console.log('Admin: admin@lms-platform.com / admin123');
-      console.log('Teacher: teacher1@lms-platform.com / teacher123');
-      console.log('Student: student1@lms-platform.com / student123');
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('👨‍💼 Admin:');
+      console.log('   Email: admin@lms-platform.com');
+      console.log('   Password: admin123');
+      console.log('');
+      console.log('👨‍🏫 Teachers:');
+      console.log('   Teacher 1: teacher1@lms-platform.com / teacher123');
+      console.log('   Teacher 2: teacher2@lms-platform.com / teacher123');
+      console.log('   Teacher 3: teacher3@lms-platform.com / teacher123');
+      console.log('');
+      console.log('👨‍🎓 Students:');
+      console.log('   Student 1 (Alice): student1@lms-platform.com / student123');
+      console.log('   Student 2 (Bob): student2@lms-platform.com / student123');
+      console.log('   Student 3 (Carol): student3@lms-platform.com / student123');
+      console.log('   Student 4 (David): student4@lms-platform.com / student123');
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       console.log('');
       console.log('📊 Data created:');
       console.log(`- ${categories.length} course categories`);
       console.log(`- 1 admin, ${teachers.length} teachers, ${students.length} students`);
       console.log(`- ${courses.length} courses`);
       console.log(`- ${lessons.length} lessons`);
+      console.log(`- ${enrollments.length} enrollments`);
       console.log('- 1 quiz with 3 questions');
+      console.log('- Multiple lesson progress records');
+      console.log('');
+      console.log('📚 Course Enrollment Summary:');
+      console.log('   Calculus: Alice (25%), Bob (50%)');
+      console.log('   Web Development: Alice (67%), Carol (0%)');
+      console.log('   Physics: Bob (0%)');
+      console.log('');
+      console.log('🎯 How to test Course Learning Page:');
+      console.log('   1. Login as student1@lms-platform.com / student123');
+      console.log('   2. Go to "My Courses" menu');
+      console.log('   3. Click "เรียนต่อ" or "เริ่มเรียน" on any enrolled course');
+      console.log('   4. You will see the Course Learning Page with lessons and progress');
       
       await transaction.commit();
       

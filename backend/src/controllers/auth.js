@@ -17,20 +17,9 @@ const { emailService } = require('../utils/emailService'); // 🔧 FIX: Import e
 // @access  Public
 const register = async (req, res) => {
   try {
-    // Validate request
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        success: false,
-        message: 'ข้อมูลไม่ถูกต้อง',
-        errors: errors.array()
-      });
-    }
-
     const {
       email,
       password,
-      confirmPassword,
       firstName,
       lastName,
       role = 'student',
@@ -38,13 +27,8 @@ const register = async (req, res) => {
       dateOfBirth
     } = req.body;
 
-    // Check if passwords match
-    if (password !== confirmPassword) {
-      return res.status(400).json({
-        success: false,
-        message: 'รหัสผ่านไม่ตรงกัน'
-      });
-    }
+    // Note: confirmPassword validation is handled by Joi schema in validation middleware
+    // If we reach here, validation has passed and passwords match
 
     // Check if user exists
     const existingUser = await User.findOne({ where: { email } });
@@ -55,17 +39,16 @@ const register = async (req, res) => {
       });
     }
 
-    // Hash password
-    const saltRounds = parseInt(process.env.BCRYPT_ROUNDS) || 12;
-    const hashedPassword = await bcrypt.hash(password, saltRounds);
+    // Note: Password will be hashed automatically by User model's beforeCreate hook
+    // Don't hash it here to avoid double hashing
 
     // Generate email verification token
     const emailVerificationToken = crypto.randomBytes(32).toString('hex');
 
-    // Create user
+    // Create user (password will be hashed by User model hook)
     const user = await User.create({
       email,
-      password: hashedPassword,
+      password, // Send plain password - User model hook will hash it
       firstName,
       lastName,
       role,
@@ -85,7 +68,7 @@ const register = async (req, res) => {
         status: user.status 
       },
       process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRE || '7d' }
+      { expiresIn: process.env.JWT_EXPIRE || (process.env.NODE_ENV === 'development' ? '30d' : '7d') }
     );
 
     // Generate refresh token
@@ -137,7 +120,7 @@ const register = async (req, res) => {
         user: userResponse,
         token,
         refreshToken,
-        expiresIn: process.env.JWT_EXPIRE || '7d'
+        expiresIn: process.env.JWT_EXPIRE || (process.env.NODE_ENV === 'development' ? '30d' : '7d')
       }
     });
 
@@ -179,21 +162,41 @@ const login = async (req, res) => {
     // Check if user is active
     if (user.status !== 'active') {
       let message = 'บัญชีของคุณยังไม่ได้รับการอนุมัติ';
-      if (user.status === 'suspended') {
+      let details = '';
+      
+      if (user.status === 'pending') {
+        if (user.role === 'teacher') {
+          message = 'บัญชีของคุณยังไม่ได้รับการอนุมัติ';
+          details = 'บัญชีครูผู้สอนต้องได้รับการอนุมัติจากผู้ดูแลระบบก่อนเข้าสู่ระบบ กรุณารอการอนุมัติ';
+        } else if (user.role === 'admin') {
+          message = 'บัญชีของคุณยังไม่ได้รับการอนุมัติ';
+          details = 'บัญชีผู้ดูแลระบบต้องได้รับการอนุมัติก่อนเข้าสู่ระบบ กรุณารอการอนุมัติ';
+        } else {
+          message = 'บัญชีของคุณยังไม่ได้รับการอนุมัติ';
+          details = 'กรุณารอการอนุมัติจากผู้ดูแลระบบ';
+        }
+      } else if (user.status === 'suspended') {
         message = 'บัญชีของคุณถูกระงับการใช้งาน';
+        details = 'บัญชีของคุณถูกระงับการใช้งานชั่วคราว กรุณาติดต่อผู้ดูแลระบบ';
       } else if (user.status === 'banned') {
         message = 'บัญชีของคุณถูกระงับการใช้งานอย่างถาวร';
+        details = 'บัญชีของคุณถูกระงับการใช้งานอย่างถาวร กรุณาติดต่อผู้ดูแลระบบ';
       }
       
       return res.status(403).json({
         success: false,
-        message
+        message,
+        details,
+        status: user.status,
+        role: user.role
       });
     }
 
     // Check password
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
+      console.error('Password mismatch for user:', email);
+      console.error('User password hash:', user.password?.substring(0, 20) + '...');
       return res.status(401).json({
         success: false,
         message: 'อีเมลหรือรหัสผ่านไม่ถูกต้อง'
@@ -209,7 +212,7 @@ const login = async (req, res) => {
         status: user.status 
       },
       process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRE || '7d' }
+      { expiresIn: process.env.JWT_EXPIRE || (process.env.NODE_ENV === 'development' ? '30d' : '7d') }
     );
 
     // Generate refresh token
@@ -254,7 +257,7 @@ const login = async (req, res) => {
         user: userResponse,
         token,
         refreshToken,
-        expiresIn: process.env.JWT_EXPIRE || '7d'
+        expiresIn: process.env.JWT_EXPIRE || (process.env.NODE_ENV === 'development' ? '30d' : '7d')
       }
     });
 
@@ -667,14 +670,14 @@ const refreshToken = async (req, res) => {
         status: user.status 
       },
       process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRE || '7d' }
+      { expiresIn: process.env.JWT_EXPIRE || (process.env.NODE_ENV === 'development' ? '30d' : '7d') }
     );
 
     res.status(200).json({
       success: true,
       data: {
         token: newToken,
-        expiresIn: process.env.JWT_EXPIRE || '7d'
+        expiresIn: process.env.JWT_EXPIRE || (process.env.NODE_ENV === 'development' ? '30d' : '7d')
       }
     });
 
