@@ -39,7 +39,7 @@ async function setupComplete() {
     console.log('Student:  student1@lms-platform.com / student123');
     console.log('');
     console.log('🚀 Ready to start development:');
-    console.log('npm run dev');
+    console.log('npm run dev');แ
     
   } catch (error) {
     console.error('❌ Complete setup failed:', error.message);

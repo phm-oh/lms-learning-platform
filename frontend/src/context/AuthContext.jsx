@@ -26,9 +26,24 @@ export const AuthProvider = ({ children }) => {
         try {
           const userData = await authService.getProfile();
           setUser(userData);
+          localStorage.setItem('user', JSON.stringify(userData));
         } catch (error) {
           console.error('Auth initialization failed:', error);
-          logout();
+          // Don't call logout here to avoid redirect loop
+          setToken(null);
+          setUser(null);
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+        }
+      } else {
+        // Try to get user from localStorage if token exists
+        const savedUser = localStorage.getItem('user');
+        if (savedUser) {
+          try {
+            setUser(JSON.parse(savedUser));
+          } catch (e) {
+            localStorage.removeItem('user');
+          }
         }
       }
       setLoading(false);
@@ -40,9 +55,10 @@ export const AuthProvider = ({ children }) => {
   const login = async (credentials) => {
     try {
       const response = await authService.login(credentials);
-      setToken(response.token);
-      setUser(response.user);
-      localStorage.setItem('token', response.token);
+      setToken(response.data.token);
+      setUser(response.data.user);
+      localStorage.setItem('token', response.data.token);
+      localStorage.setItem('user', JSON.stringify(response.data.user));
       return response;
     } catch (error) {
       throw error;
@@ -52,9 +68,10 @@ export const AuthProvider = ({ children }) => {
   const register = async (userData) => {
     try {
       const response = await authService.register(userData);
-      setToken(response.token);
-      setUser(response.user);
-      localStorage.setItem('token', response.token);
+      setToken(response.data.token);
+      setUser(response.data.user);
+      localStorage.setItem('token', response.data.token);
+      localStorage.setItem('user', JSON.stringify(response.data.user));
       return response;
     } catch (error) {
       throw error;
@@ -65,6 +82,8 @@ export const AuthProvider = ({ children }) => {
     setToken(null);
     setUser(null);
     localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    window.location.href = '/login';
   };
 
   const updateProfile = async (profileData) => {

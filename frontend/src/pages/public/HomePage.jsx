@@ -3,12 +3,14 @@
 // Path: frontend/src/pages/public/HomePage.jsx
 
 import React from 'react';
-import { useTheme } from '../../context/ThemeContext';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 
 const HomePage = () => {
-  const { isDark } = useTheme();
+  const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
 
   const features = [
     {
@@ -30,9 +32,9 @@ const HomePage = () => {
       gradient: "from-green-500 to-teal-500"
     },
     {
-      title: "ใบประกาศนียบัตร",
-      description: "รับใบประกาศนียบัตรเมื่อจบหลักสูตรเรียบร้อยแล้ว",
-      icon: "🏆",
+      title: "เรียนเป็นขั้นตอน",
+      description: "เนื้อหาจัดเรียงจากง่ายไปยาก พัฒนาทักษะอย่างเป็นระบบ",
+      icon: "📚",
       gradient: "from-yellow-500 to-orange-500"
     }
   ];
@@ -79,18 +81,24 @@ const HomePage = () => {
             <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-6">
               เรียนรู้ไปกับ
               <span className="bg-gradient-to-r from-primary-500 to-purple-600 bg-clip-text text-transparent">
-                {" "}LearnSync
+                {" "}kruOh-IT
               </span>
             </h1>
             <p className="text-xl text-gray-600 mb-8 max-w-3xl mx-auto leading-relaxed">
-              แพลตฟอร์มการเรียนรู้ออนไลน์ที่ทันสมัย พร้อมเนื้อหาคุณภาพสูง 
-              และระบบการเรียนการสอนที่ตอบโจทย์ทุกความต้องการ
+              แพลตฟอร์มการเรียนรู้เทคโนโลยีสารสนเทศสำหรับนักเรียนแผนกวิชาเทคโนโลยีสารสนเทศ
+              ส่งเสริมการเรียนรู้เพิ่มศักยภาพสำหรับการเรียนรู้ที่มีประสิทธิภาพ
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Button 
                 size="lg" 
                 className="px-8 py-4"
-                onClick={() => window.location.href = '/courses'}
+                onClick={() => {
+                  if (isAuthenticated) {
+                    navigate('/dashboard');
+                  } else {
+                    navigate('/login');
+                  }
+                }}
               >
                 เริ่มเรียนฟรี
               </Button>
@@ -98,7 +106,7 @@ const HomePage = () => {
                 variant="outline" 
                 size="lg"
                 className="px-8 py-4"
-                onClick={() => window.location.href = '/about'}
+                onClick={() => navigate('/about')}
               >
                 เรียนรู้เพิ่มเติม
               </Button>
@@ -112,10 +120,10 @@ const HomePage = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <h2 className="text-4xl font-bold text-gray-900 mb-4">
-              ทำไมต้องเลือก LearnSync?
+              kruOh-IT
             </h2>
             <p className="text-xl text-gray-600">
-              เรามีทุกสิ่งที่คุณต้องการสำหรับการเรียนรู้ที่มีประสิทธิภาพ
+              ส่งเสริมการเรียนรู้เพิ่มศักยภาพสำหรับการเรียนรู้ที่มีประสิทธิภาพ
             </p>
           </div>
           
@@ -146,10 +154,10 @@ const HomePage = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <h2 className="text-4xl font-bold text-gray-900 mb-4">
-              หลักสูตรยอดนิยม
+              หลักสูตรที่มีในปัจจุบัน
             </h2>
             <p className="text-xl text-gray-600">
-              เรียนรู้จากหลักสูตรที่ได้รับความนิยมสูงสุด
+              เลือกหลักสูตรที่สนใจและเริ่มต้นการเรียนรู้
             </p>
           </div>
           
@@ -167,7 +175,7 @@ const HomePage = () => {
                     className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300"
                   />
                   <div className={`absolute top-4 left-4 px-3 py-1 rounded-full text-white text-sm font-medium bg-gradient-to-r ${course.gradient}`}>
-                    {course.price}
+                    ฟรี
                   </div>
                 </div>
                 <div className="p-6">
@@ -188,7 +196,7 @@ const HomePage = () => {
             <Button 
               variant="outline" 
               size="lg"
-              onClick={() => window.location.href = '/courses'}
+              onClick={() => navigate('/courses')}
             >
               ดูหลักสูตรทั้งหมด
             </Button>
@@ -203,15 +211,21 @@ const HomePage = () => {
             พร้อมเริ่มต้นการเรียนรู้แล้วหรือยัง?
           </h2>
           <p className="text-xl text-white text-opacity-90 mb-8 max-w-2xl mx-auto">
-            สมัครสมาชิกวันนี้และเริ่มเรียนรู้ทักษะใหม่ๆ ที่จะช่วยให้คุณประสบความสำเร็จ
+            ลงทะเบียนรายวิชาและเริ่มพัฒนาทักษะด้านเทคโนโลยีสารสนเทศของคุณวันนี้
           </p>
           <Button 
             variant="secondary"
             size="lg"
             className="px-8 py-4 text-primary-600 hover:text-primary-700"
-            onClick={() => window.location.href = '/register'}
+            onClick={() => {
+              if (isAuthenticated) {
+                navigate('/dashboard');
+              } else {
+                navigate('/register');
+              }
+            }}
           >
-            สมัครสมาชิกฟรี
+            ลงทะเบียนรายวิชา
           </Button>
         </div>
       </section>

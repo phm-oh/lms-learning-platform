@@ -4,7 +4,7 @@
 
 import React from 'react';
 
-export const LoadingSpinner = ({ 
+const LoadingSpinner = ({ 
   size = 'md',
   color = 'primary',
   className = '' 
@@ -42,3 +42,6 @@ export const LoadingSpinner = ({
     </div>
   );
 };
+
+export default LoadingSpinner;
+export { LoadingSpinner };

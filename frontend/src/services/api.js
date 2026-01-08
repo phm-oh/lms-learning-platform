@@ -33,16 +33,50 @@ api.interceptors.response.use(
   (response) => {
     return response.data;
   },
-  (error) => {
-    // ถ้า token หมดอายุ ให้ logout อัตโนมัติ
-    if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      window.location.href = '/login';
+  async (error) => {
+    const originalRequest = error.config;
+    
+    // ถ้า token หมดอายุ (401) และยังไม่ได้ retry
+    if (error.response?.status === 401 && !originalRequest._retry && !window.location.pathname.includes('/login')) {
+      originalRequest._retry = true;
+      
+      // ลอง refresh token ก่อน (ถ้ามี refresh token mechanism)
+      // สำหรับตอนนี้ ให้ logout เฉพาะเมื่อ token จริงๆ หมดอายุ
+      // แต่ถ้าเป็น development mode ให้ขยายเวลา token ไว้ก่อน
+      
+      // ตรวจสอบว่าเป็น token expired หรือไม่
+      const errorMessage = error.response?.data?.message || '';
+      if (errorMessage.includes('token') || errorMessage.includes('expired') || errorMessage.includes('invalid')) {
+        // Token หมดอายุจริงๆ ให้ logout
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        window.location.href = '/login';
+      }
+      // ถ้าไม่ใช่ token error อาจจะเป็น authentication error อื่น
     }
     
     // สร้าง error message ที่เข้าใจง่าย
-    const errorMessage = error.response?.data?.message || 'เกิดข้อผิดพลาดในการเชื่อมต่อ';
-    return Promise.reject(new Error(errorMessage));
+    const errorData = error.response?.data;
+    let errorMessage = 'เกิดข้อผิดพลาดในการเชื่อมต่อ';
+    
+    if (errorData) {
+      // ถ้ามี message หลัก
+      if (errorData.message) {
+        errorMessage = errorData.message;
+      }
+      // ถ้ามี errors array ให้ใช้ error แรก
+      else if (errorData.errors && Array.isArray(errorData.errors) && errorData.errors.length > 0) {
+        const firstError = errorData.errors[0];
+        errorMessage = typeof firstError === 'string' 
+          ? firstError 
+          : firstError.message || firstError;
+      }
+    }
+    
+    // สร้าง error object ที่มี response data ด้วย
+    const customError = new Error(errorMessage);
+    customError.response = error.response;
+    return Promise.reject(customError);
   }
 );
 

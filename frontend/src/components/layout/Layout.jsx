@@ -31,6 +31,7 @@ import Button from '../ui/Button';
 import Card from '../ui/Card';
 import Input from '../ui/Input';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 
 /**
  * Layout Component - Modern EdTech Layout
@@ -100,8 +101,8 @@ const Layout = ({
             isCollapsed={isCollapsed}
           />
 
-          {/* Main Content Area */}
-          <main className="flex-1 p-6 lg:p-8 pt-24 overflow-x-hidden">
+          {/* Main Content Area - padding-top ต้องมากกว่า header height (h-20 = 80px) */}
+          <main className="flex-1 p-6 lg:p-8 pt-24 overflow-x-hidden" style={{ paddingTop: '6rem' }}>
             <div className="max-w-7xl mx-auto animate-fade-in">
               {children}
             </div>
@@ -132,12 +133,15 @@ const Header = ({
 }) => {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const { logout } = useAuth();
+  const navigate = useNavigate();
 
   return (
     <header className={`
       fixed top-0 right-0 z-30 h-20 transition-all duration-300
       ${showSidebar ? (isCollapsed ? 'left-0 lg:left-20' : 'left-0 lg:left-72') : 'left-0'}
-      bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border-b border-gray-200 dark:border-gray-800
+      bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800
+      shadow-sm
     `}>
       <div className="h-full px-6 flex items-center justify-between">
 
@@ -209,12 +213,12 @@ const Header = ({
               className="flex items-center gap-3 hover:bg-gray-50 p-1.5 pr-3 rounded-full transition-all border border-transparent hover:border-gray-200"
             >
               <img
-                src={user?.profilePhoto || `https://ui-avatars.com/api/?name=${user?.firstName || 'User'}&background=8b5cf6&color=fff`}
+                src={user?.profilePhoto || user?.profileImage || `https://ui-avatars.com/api/?name=${encodeURIComponent((user?.firstName || '') + ' ' + (user?.lastName || '') || 'User')}&background=8b5cf6&color=fff`}
                 alt="Profile"
                 className="w-9 h-9 rounded-full object-cover ring-2 ring-white shadow-sm"
               />
               <div className="hidden sm:block text-left">
-                <p className="text-sm font-semibold text-gray-900 leading-none">{user?.firstName || 'Phanumet'}</p>
+                <p className="text-sm font-semibold text-gray-900 leading-none">{user?.firstName || 'User'} {user?.lastName || ''}</p>
                 <p className="text-xs text-gray-500 mt-1 capitalize">{user?.role || 'Student'}</p>
               </div>
             </button>
@@ -222,15 +226,37 @@ const Header = ({
             {showUserMenu && (
               <div className="absolute right-0 mt-4 w-56 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden animate-scale-in origin-top-right">
                 <div className="p-4 border-b border-gray-50 bg-gray-50/50">
-                  <p className="font-semibold text-gray-900">{user?.firstName || 'Phanumet'} {user?.lastName}</p>
-                  <p className="text-xs text-gray-500">{user?.email || 'user@example.com'}</p>
+                  <p className="font-semibold text-gray-900">{user?.firstName || 'User'} {user?.lastName || ''}</p>
+                  <p className="text-xs text-gray-500">{user?.email || ''}</p>
                 </div>
                 <div className="p-2">
-                  <UserMenuItem icon={User} label="My Profile" />
-                  <UserMenuItem icon={Settings} label="Settings" />
+                  <UserMenuItem 
+                    icon={User} 
+                    label="My Profile" 
+                    onClick={() => {
+                      navigate('/profile');
+                      setShowUserMenu(false);
+                    }}
+                  />
+                  <UserMenuItem 
+                    icon={Settings} 
+                    label="Settings" 
+                    onClick={() => {
+                      navigate('/settings');
+                      setShowUserMenu(false);
+                    }}
+                  />
                   <UserMenuItem icon={HelpCircle} label="Help Center" />
                   <div className="h-px bg-gray-100 my-2"></div>
-                  <UserMenuItem icon={LogOut} label="Sign Out" className="text-red-600 hover:bg-red-50" />
+                  <UserMenuItem 
+                    icon={LogOut} 
+                    label="Sign Out" 
+                    className="text-red-600 hover:bg-red-50"
+                    onClick={() => {
+                      logout();
+                      setShowUserMenu(false);
+                    }}
+                  />
                 </div>
               </div>
             )}
@@ -251,15 +277,16 @@ const Sidebar = ({
 }) => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { logout } = useAuth();
 
   const menuItems = {
     student: [
-      { icon: LayoutDashboard, label: 'Overview', path: '/' },
+      { icon: LayoutDashboard, label: 'Overview', path: '/dashboard' },
+      { icon: BookOpen, label: 'My Courses', path: '/my-courses' },
+      { icon: FileText, label: 'My Enrollments', path: '/enrollments' },
+      { icon: FileText, label: 'Assignments', path: '/assignments' },
+      { icon: Award, label: 'Skill Tests', path: '/quizzes' },
       { icon: User, label: 'My Profile', path: '/profile' },
-      { icon: BookOpen, label: 'My Course', path: '/my-courses' },
-      { icon: FileText, label: 'Assignment', path: '/assignments' },
-      { icon: Award, label: 'Skill Test', path: '/quizzes' },
-      { icon: PieChart, label: 'Order History', path: '/orders' },
     ],
     teacher: [
       { icon: LayoutDashboard, label: 'Dashboard', path: '/teacher/dashboard' },
@@ -352,17 +379,29 @@ const Sidebar = ({
 
           {/* Bottom Menu */}
           <div className="mt-8 pt-8 border-t border-white/10 space-y-2">
-            <button className={`
-              w-full flex items-center px-4 py-3.5 rounded-2xl text-purple-100 hover:bg-white/10 hover:text-white transition-all
-              ${isCollapsed ? 'justify-center px-2' : 'gap-3'}
-            `}>
+            <button 
+              onClick={() => {
+                navigate('/settings');
+                onCloseMobile();
+              }}
+              className={`
+                w-full flex items-center px-4 py-3.5 rounded-2xl text-purple-100 hover:bg-white/10 hover:text-white transition-all
+                ${isCollapsed ? 'justify-center px-2' : 'gap-3'}
+              `}
+            >
               <Settings size={22} />
               {!isCollapsed && <span className="font-medium text-sm">Settings</span>}
             </button>
-            <button className={`
-              w-full flex items-center px-4 py-3.5 rounded-2xl text-purple-100 hover:bg-white/10 hover:text-white transition-all
-              ${isCollapsed ? 'justify-center px-2' : 'gap-3'}
-            `}>
+            <button 
+              onClick={() => {
+                logout();
+                onCloseMobile();
+              }}
+              className={`
+                w-full flex items-center px-4 py-3.5 rounded-2xl text-purple-100 hover:bg-white/10 hover:text-white transition-all
+                ${isCollapsed ? 'justify-center px-2' : 'gap-3'}
+              `}
+            >
               <LogOut size={22} />
               {!isCollapsed && <span className="font-medium text-sm">Log Out</span>}
             </button>
@@ -379,20 +418,26 @@ const Sidebar = ({
           </button>
         </div>
 
-        {/* Join Course Card (Only when expanded) */}
-        {!isCollapsed && (
+        {/* Browse Courses Card (Only when expanded) */}
+        {!isCollapsed && userRole === 'student' && (
           <div className="p-6 relative z-10">
             <div className="bg-white/10 backdrop-blur-md rounded-3xl p-4 border border-white/20 relative overflow-hidden group">
               <div className="absolute -right-6 -top-6 w-20 h-20 bg-purple-500 rounded-full blur-2xl opacity-50 group-hover:opacity-70 transition-opacity"></div>
 
               <div className="relative z-10 flex flex-col items-center text-center">
                 <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center mb-3 shadow-lg">
-                  <span className="text-2xl">🚀</span>
+                  <BookOpen className="text-primary-600" size={24} />
                 </div>
-                <h4 className="font-bold text-white text-sm mb-1">Join Course</h4>
-                <p className="text-xs text-purple-100 mb-3">Upgrade your skills today!</p>
-                <button className="w-full py-2 bg-white text-primary-600 rounded-xl text-xs font-bold hover:shadow-lg hover:scale-105 transition-all">
-                  Join Now
+                <h4 className="font-bold text-white text-sm mb-1">ค้นหาหลักสูตร</h4>
+                <p className="text-xs text-purple-100 mb-3">ลงทะเบียนเรียนหลักสูตรใหม่</p>
+                <button 
+                  onClick={() => {
+                    navigate('/courses');
+                    onCloseMobile();
+                  }}
+                  className="w-full py-2 bg-white text-primary-600 rounded-xl text-xs font-bold hover:shadow-lg hover:scale-105 transition-all"
+                >
+                  ดูหลักสูตร
                 </button>
               </div>
             </div>
